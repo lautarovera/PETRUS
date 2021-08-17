@@ -34,7 +34,10 @@ from COMMON.Iono import computeIonoMappingFunction
 
 # Preprocessing internal functions
 #-----------------------------------------------------------------------
-
+def rejectSatsMinElevation(ObsInfo, PreproObsInfo, SatElevList):
+    SatMinElevIdx = SatElevList.index(min(SatElevList))
+    SatMinElevLabel = ObsInfo[SatMinElevIdx][ObsIdx["CONST"]] + "%02d" % int(ObsInfo[SatMinElevIdx][ObsIdx["PRN"]])
+    PreproObsInfo.pop(SatMinElevLabel)
 
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
@@ -83,8 +86,14 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     # Initialize output
     PreproObsInfo = OrderedDict({})
 
+    # Helper list to hold the elevations of the satellites to further rejection if needed
+    SatElevList = []
+
     # Loop over satellites
     for SatObs in ObsInfo:
+        # Get list of elevations
+        SatElevList.append(float(SatObs[ObsIdx["ELEV"]]))
+
         # Initialize output info
         SatPreproObsInfo = {
             "Sod": 0.0,             # Second of day
@@ -118,21 +127,25 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
 
         # Get satellite label
         SatLabel = SatObs[ObsIdx["CONST"]] + "%02d" % int(SatObs[ObsIdx["PRN"]])
-
         # Prepare outputs
         # Get SoD
         SatPreproObsInfo["Sod"] = float(SatObs[ObsIdx["SOD"]])
         # Get DoY
         SatPreproObsInfo["Doy"] = int(SatObs[ObsIdx["DOY"]])
         # Get Elevation
-        # ...
+        SatPreproObsInfo["Elevation"] = float(SatObs[ObsIdx["ELEV"]])
 
         # Prepare output for the satellite
         PreproObsInfo[SatLabel] = SatPreproObsInfo
 
     # Limit the satellites to the Number of Channels
     # ----------------------------------------------------------
-    # ...
+    # PETRUS-PPVE-REQ-010
+
+    # If the number of satellites in view exceeds the maximum allowed channels
+    while len(ObsInfo) > Conf["NCHANNELS_GPS"]:
+        # Remove those satellites with the lower Elevation
+        rejectSatsMinElevation(ObsInfo, PreproObsInfo, SatElevList)
 
     return PreproObsInfo
 

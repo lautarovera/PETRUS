@@ -100,3 +100,11 @@ SCN/SCEN-PETRUS-GEO123-JAN19/OUT/._SPVT
 SRC/._COMMON
 .vscode/launch.json
 .vscode/petrus.code-workspace
+SCN/SCEN-PETRUS-GEO123-JAN19/OUT/PPVE/PREPRO_OBS_TLSZ_Y19D014.dat
+SRC/__pycache__/InputOutput.cpython-37.pyc
+SRC/__pycache__/Preprocessing.cpython-37.pyc
+SRC/COMMON/__pycache__/__init__.cpython-37.pyc
+SRC/COMMON/__pycache__/Coordinates.cpython-37.pyc
+SRC/COMMON/__pycache__/Dates.cpython-37.pyc
+SRC/COMMON/__pycache__/GnssConstants.cpython-37.pyc
+SRC/COMMON/__pycache__/Iono.cpython-37.pyc
