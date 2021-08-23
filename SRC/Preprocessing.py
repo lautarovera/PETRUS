@@ -31,13 +31,33 @@ from InputOutput import RcvrIdx, ObsIdx, REJECTION_CAUSE
 from InputOutput import FLAG, VALUE, TH, CSNEPOCHS
 import numpy as np
 from COMMON.Iono import computeIonoMappingFunction
+from operator import itemgetter
 
 # Preprocessing internal functions
 #-----------------------------------------------------------------------
-def rejectSatsMinElevation(ObsInfo, PreproObsInfo, SatElevList):
-    SatMinElevIdx = SatElevList.index(min(SatElevList))
-    SatMinElevLabel = ObsInfo[SatMinElevIdx][ObsIdx["CONST"]] + "%02d" % int(ObsInfo[SatMinElevIdx][ObsIdx["PRN"]])
-    PreproObsInfo[SatMinElevLabel]["RejectionCause"] = 1
+def rejectGpsSatsMinElevation(Conf, ObsInfo, PreproObsInfo):
+    SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
+    SatsNumberToReject = len(SatsElevation) - Conf["NCHANNELS_GPS"]
+    SatsNumberToReject = 4
+    SatsRejected = dict(sorted(SatsElevation.items(), key = itemgetter(1))[:SatsNumberToReject])
+
+    for Sat in SatsRejected:
+        SatLabel = "G" + "%02d" % int(Sat)
+        PreproObsInfo[SatLabel]["ValidL1"] = 0
+        PreproObsInfo[SatLabel]["RejectionCause"] = 1
+
+    print(PreproObsInfo)
+
+def rejectGalSatsMinElevation(Conf, ObsInfo, PreproObsInfo):
+    SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "E"}
+    SatsNumberToReject = int(len(SatsElevation) - Conf["NCHANNELS_GAL"])
+    SatsRejected = dict(sorted(SatsElevation.items(), key = itemgetter(1))[:SatsNumberToReject])
+
+    for Sat in SatsRejected:
+        SatLabel = "E" + "%02d" % int(Sat)
+        PreproObsInfo[SatLabel]["ValidL1"] = 0
+        PreproObsInfo[SatLabel]["RejectionCause"] = 1
+
 
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
@@ -86,16 +106,17 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     # Initialize output
     PreproObsInfo = OrderedDict({})
 
-    # Helper list to hold the elevations of the satellites to further rejection if needed
-    GpsSatElevList = GalSatElevList = []
+    # Number of satellites visibles for each constellation
+    NSATS_GPS = NSATS_GAL = 0
 
     # Loop over satellites
     for SatObs in ObsInfo:
-        # Get list of elevations
+        # Get GPS satellites in view 
         if SatObs[ObsIdx["CONST"]] == "G":
-            GpsSatElevList.append(float(SatObs[ObsIdx["ELEV"]]))
+            NSATS_GPS += 1
+        # Get GAL satellites in view 
         if SatObs[ObsIdx["CONST"]] == "E":
-            GalSatElevList.append(float(SatObs[ObsIdx["ELEV"]]))
+            NSATS_GAL += 1
 
         # Initialize output info
         SatPreproObsInfo = {
@@ -146,13 +167,13 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     # PETRUS-PPVE-REQ-010
 
     # If the number of satellites in view exceeds the maximum allowed channels
-    while len(GpsSatElevList) > Conf["NCHANNELS_GPS"]:
+    if NSATS_GPS > Conf["NCHANNELS_GPS"]:
         # Remove those satellites with the lower Elevation
-        rejectSatsMinElevation(ObsInfo, PreproObsInfo, GpsSatElevList)
+        rejectGpsSatsMinElevation(Conf, ObsInfo, PreproObsInfo)
 
-    while len(GalSatElevList) > Conf["NCHANNELS_GAL"]:
+    if NSATS_GAL > Conf["NCHANNELS_GAL"]:
         # Remove those satellites with the lower Elevation
-        rejectSatsMinElevation(ObsInfo, PreproObsInfo, GalSatElevList)
+        rejectGalSatsMinElevation(Conf, ObsInfo, PreproObsInfo)
 
     return PreproObsInfo
 
