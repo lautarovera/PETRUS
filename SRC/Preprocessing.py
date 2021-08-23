@@ -162,9 +162,8 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         # Prepare output for the satellite
         PreproObsInfo[SatLabel] = SatPreproObsInfo
 
-    # Limit the satellites to the Number of Channels
-    # ----------------------------------------------------------
-    # PETRUS-PPVE-REQ-010
+    # [PETRUS-PPVE-REQ-010] Limit the satellites to the Number of Channels
+    # ---------------------------------------------------------------------------
 
     # If the number of satellites in view exceeds the maximum allowed channels
     if NSATS_GPS > Conf["NCHANNELS_GPS"]:
@@ -174,6 +173,33 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     if NSATS_GAL > Conf["NCHANNELS_GAL"]:
         # Remove those satellites with the lower Elevation
         rejectGalSatsMinElevation(Conf, ObsInfo, PreproObsInfo)
+
+    # Loop over all GPS PRNs
+    for PRN in range(1, 33):
+        SatLabel = "G" + "%02d" % int(PRN)
+        # Check if the satellite is in view
+        # ------------------------------------------------------------------------
+        if not SatLabel in PreproObsInfo:
+            continue
+
+        # Check if the satellite is valid
+        # ------------------------------------------------------------------------
+        if PreproObsInfo[SatLabel]["ValidL1"] == 0:
+            continue
+
+        # Check satellite Elevation angle in front of the minimum by configuration
+        # ------------------------------------------------------------------------
+        if PreproObsInfo[SatLabel]["Elevation"] < Conf["ELEV_NOISE_TH"]:
+            PreproObsInfo[SatLabel]["ValidL1"] = 0
+            PreproObsInfo[SatLabel]["RejectionCause"] = 2
+
+        # [PETRUS-PPVE-REQ-020] Measurement quality monitoring 
+        # ------------------------------------------------------------------------------ 
+        # Check Signal To Noise Ratio in front of Minimum by configuration (if activated) 
+        # ------------------------------------------------------------------------------
+        if Conf["MIN_CNR"][0] == 1 and PreproObsInfo[SatLabel]["S1"] < Conf["MIN_CNR"][1]:
+            PreproObsInfo[SatLabel]["ValidL1"] = 0
+            PreproObsInfo[SatLabel]["RejectionCause"] = 3
 
     return PreproObsInfo
 
