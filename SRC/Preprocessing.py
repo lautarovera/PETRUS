@@ -37,7 +37,7 @@ from COMMON.Iono import computeIonoMappingFunction
 def rejectSatsMinElevation(ObsInfo, PreproObsInfo, SatElevList):
     SatMinElevIdx = SatElevList.index(min(SatElevList))
     SatMinElevLabel = ObsInfo[SatMinElevIdx][ObsIdx["CONST"]] + "%02d" % int(ObsInfo[SatMinElevIdx][ObsIdx["PRN"]])
-    PreproObsInfo.pop(SatMinElevLabel)
+    PreproObsInfo[SatMinElevLabel]["RejectionCause"] = 1
 
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
@@ -87,12 +87,15 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     PreproObsInfo = OrderedDict({})
 
     # Helper list to hold the elevations of the satellites to further rejection if needed
-    SatElevList = []
+    GpsSatElevList = GalSatElevList = []
 
     # Loop over satellites
     for SatObs in ObsInfo:
         # Get list of elevations
-        SatElevList.append(float(SatObs[ObsIdx["ELEV"]]))
+        if SatObs[ObsIdx["CONST"]] == "G":
+            GpsSatElevList.append(float(SatObs[ObsIdx["ELEV"]]))
+        if SatObs[ObsIdx["CONST"]] == "E":
+            GalSatElevList.append(float(SatObs[ObsIdx["ELEV"]]))
 
         # Initialize output info
         SatPreproObsInfo = {
@@ -143,9 +146,13 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     # PETRUS-PPVE-REQ-010
 
     # If the number of satellites in view exceeds the maximum allowed channels
-    while len(ObsInfo) > Conf["NCHANNELS_GPS"]:
+    while len(GpsSatElevList) > Conf["NCHANNELS_GPS"]:
         # Remove those satellites with the lower Elevation
-        rejectSatsMinElevation(ObsInfo, PreproObsInfo, SatElevList)
+        rejectSatsMinElevation(ObsInfo, PreproObsInfo, GpsSatElevList)
+
+    while len(GalSatElevList) > Conf["NCHANNELS_GAL"]:
+        # Remove those satellites with the lower Elevation
+        rejectSatsMinElevation(ObsInfo, PreproObsInfo, GalSatElevList)
 
     return PreproObsInfo
 
