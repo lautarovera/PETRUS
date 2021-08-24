@@ -33,30 +33,31 @@ import numpy as np
 from COMMON.Iono import computeIonoMappingFunction
 from operator import itemgetter
 
+# Globals
+#-----------------------------------------------------------------------
+NSATS_GPS = NSATS_GPS = 0
+
 # Preprocessing internal functions
 #-----------------------------------------------------------------------
 def rejectGpsSatsMinElevation(Conf, ObsInfo, PreproObsInfo):
     SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
-    SatsNumberToReject = len(SatsElevation) - Conf["NCHANNELS_GPS"]
-    SatsNumberToReject = 4
+    SatsNumberToReject = NSATS_GPS - Conf["NCHANNELS_GPS"]
     SatsRejected = dict(sorted(SatsElevation.items(), key = itemgetter(1))[:SatsNumberToReject])
 
     for Sat in SatsRejected:
         SatLabel = "G" + "%02d" % int(Sat)
         PreproObsInfo[SatLabel]["ValidL1"] = 0
-        PreproObsInfo[SatLabel]["RejectionCause"] = 1
-
-    print(PreproObsInfo)
+        PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["NCHANNELS_GPS"]
 
 def rejectGalSatsMinElevation(Conf, ObsInfo, PreproObsInfo):
     SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "E"}
-    SatsNumberToReject = int(len(SatsElevation) - Conf["NCHANNELS_GAL"])
+    SatsNumberToReject = NSATS_GPS - Conf["NCHANNELS_GAL"]
     SatsRejected = dict(sorted(SatsElevation.items(), key = itemgetter(1))[:SatsNumberToReject])
 
     for Sat in SatsRejected:
         SatLabel = "E" + "%02d" % int(Sat)
         PreproObsInfo[SatLabel]["ValidL1"] = 0
-        PreproObsInfo[SatLabel]["RejectionCause"] = 1
+        PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["NCHANNELS_GPS"]
 
 
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
@@ -102,9 +103,10 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     #         Preprocessed observations for current epoch per sat
     #         PreproObsInfo["G01"]["C1"]
     
-
     # Initialize output
     PreproObsInfo = OrderedDict({})
+    GapCounter = {Sat[ObsIdx["PRN"]]:0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
+    ResetHatchFilter = {Sat[ObsIdx["PRN"]]:False for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
 
     # Number of satellites visibles for each constellation
     NSATS_GPS = NSATS_GAL = 0
@@ -162,8 +164,9 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         # Prepare output for the satellite
         PreproObsInfo[SatLabel] = SatPreproObsInfo
 
-    # [PETRUS-PPVE-REQ-010] Limit the satellites to the Number of Channels
+    # Limit the satellites to the Number of Channels
     # ---------------------------------------------------------------------------
+    # [PETRUS-PPVE-REQ-010]
 
     # If the number of satellites in view exceeds the maximum allowed channels
     if NSATS_GPS > Conf["NCHANNELS_GPS"]:
@@ -175,8 +178,8 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         rejectGalSatsMinElevation(Conf, ObsInfo, PreproObsInfo)
 
     # Loop over all GPS PRNs
-    for PRN in range(1, 33):
-        SatLabel = "G" + "%02d" % int(PRN)
+    for prn in range(1, Const.MAX_NUM_SATS_CONSTEL + 1):
+        SatLabel = "G" + "%02d" % int(prn)
         # Check if the satellite is in view
         # ------------------------------------------------------------------------
         if not SatLabel in PreproObsInfo:
@@ -189,17 +192,39 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
 
         # Check satellite Elevation angle in front of the minimum by configuration
         # ------------------------------------------------------------------------
-        if PreproObsInfo[SatLabel]["Elevation"] < Conf["ELEV_NOISE_TH"]:
+        if PreproObsInfo[SatLabel]["Elevation"] < Conf["RCVR_MASK"]:
             PreproObsInfo[SatLabel]["ValidL1"] = 0
             PreproObsInfo[SatLabel]["RejectionCause"] = 2
 
-        # [PETRUS-PPVE-REQ-020] Measurement quality monitoring 
-        # ------------------------------------------------------------------------------ 
+        # Measurement quality monitoring 
+
         # Check Signal To Noise Ratio in front of Minimum by configuration (if activated) 
         # ------------------------------------------------------------------------------
+        # [PETRUS-PPVE-REQ-020]
+        
         if Conf["MIN_CNR"][0] == 1 and PreproObsInfo[SatLabel]["S1"] < Conf["MIN_CNR"][1]:
             PreproObsInfo[SatLabel]["ValidL1"] = 0
             PreproObsInfo[SatLabel]["RejectionCause"] = 3
+
+        # Check Pseudo-ranges Out-of-Range in front of Maximum by configuration 
+        # ------------------------------------------------------------------------------
+        if Conf["MAX_PSR_OUTRNG"][0] == 1 and PreproObsInfo[SatLabel]["C1"] > Conf["MAX_PSR_OUTRNG"][1]:
+            PreproObsInfo[SatLabel]["ValidL1"] = 0
+            PreproObsInfo[SatLabel]["RejectionCause"] = 4
+
+        # Check Measurement Data gaps 
+        # ------------------------------------------------------------------------------
+        DeltaT = PreproObsInfo[SatLabel]["Sod"] - PrevPreproObsInfo[SatLabel]["PrevEpoch"]
+
+        if DeltaT > Conf["SAMPLING_RATE"]:
+            # Increment gap counter
+            GapCounter[prn] = DeltaT
+            # Check if gap is longer than the allowed maximum
+            if GapCounter[prn] > Conf["HATCH_GAP_TH"]:
+                # Reset filter
+                ResetHatchFilter[prn] = True
+
+        PrevPreproObsInfo[SatLabel]["PrevEpoch"] = PreproObsInfo[SatLabel]["Sod"]
 
     return PreproObsInfo
 
