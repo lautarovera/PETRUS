@@ -39,26 +39,72 @@ NSATS_GPS = NSATS_GPS = 0
 
 # Preprocessing internal functions
 #-----------------------------------------------------------------------
-def rejectGpsSatsMinElevation(Conf, ObsInfo, PreproObsInfo):
-    SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
+def rejectGpsSatsMinElevation(Conf, Obs, PreproObs):
+    SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in Obs if Sat[ObsIdx["CONST"]] == "G"}
     SatsNumberToReject = NSATS_GPS - Conf["NCHANNELS_GPS"]
     SatsRejected = dict(sorted(SatsElevation.items(), key = itemgetter(1))[:SatsNumberToReject])
 
     for Sat in SatsRejected:
         SatLabel = "G" + "%02d" % int(Sat)
-        PreproObsInfo[SatLabel]["ValidL1"] = 0
-        PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["NCHANNELS_GPS"]
+        PreproObs[SatLabel]["ValidL1"] = 0
+        PreproObs[SatLabel]["RejectionCause"] = REJECTION_CAUSE["NCHANNELS_GPS"]
 
-def rejectGalSatsMinElevation(Conf, ObsInfo, PreproObsInfo):
-    SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "E"}
+def rejectGalSatsMinElevation(Conf, Obs, PreproObs):
+    SatsElevation = {Sat[ObsIdx["PRN"]]:float(Sat[ObsIdx["ELEV"]]) for Sat in Obs if Sat[ObsIdx["CONST"]] == "E"}
     SatsNumberToReject = NSATS_GPS - Conf["NCHANNELS_GAL"]
     SatsRejected = dict(sorted(SatsElevation.items(), key = itemgetter(1))[:SatsNumberToReject])
 
     for Sat in SatsRejected:
         SatLabel = "E" + "%02d" % int(Sat)
-        PreproObsInfo[SatLabel]["ValidL1"] = 0
-        PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["NCHANNELS_GPS"]
+        PreproObs[SatLabel]["ValidL1"] = 0
+        PreproObs[SatLabel]["RejectionCause"] = REJECTION_CAUSE["NCHANNELS_GPS"]
 
+def detectCycleSlips(PreproObs, PrevPreproObs, Prn, Threshold):
+    # Compute the Third order difference (TOD)
+    result = False
+    SatLabel = "G" + "%02d" % int(Prn)
+    # Current and previous phase measurements
+    CP_n = PreproObs[SatLabel]["L1"]
+    CP_n_1 = PrevPreproObs[SatLabel]["L1_n_1"]
+    CP_n_2 = PrevPreproObs[SatLabel]["L1_n_2"]
+    CP_n_3 = PrevPreproObs[SatLabel]["L1_n_3"]
+    # Previous measurements instants
+    t1 = PreproObs[SatLabel]["Sod"] - PrevPreproObs[SatLabel]["t_n_1"]
+    t2 = PrevPreproObs[SatLabel]["t_n_1"] - PrevPreproObs[SatLabel]["t_n_2"]
+    t3 = PrevPreproObs[SatLabel]["t_n_2"] - PrevPreproObs[SatLabel]["t_n_3"]
+    # Residuals equation factors
+    R1 = float((t1 + t2) * (t1 + t2 + t3)) / (t2 * (t2 + t3)) if t2 != 0 else 0
+    R2 = float(-t1 * (t1 + t2 + t3)) / (t2 * t3) if (t2 and t3) != 0 else 0
+    R3 = float(t1 * (t1 + t2)) / ((t2 + t3) * t3) if t3 != 0 else 0
+    # Compute TOD residuals
+    # TOD = L1 -3*L1_n_1 + 3*L1_n_2 - L1_n_3
+    CsResidual = abs(CP_n - R1 * CP_n_1 - R2 * CP_n_2 - R3 * CP_n_3)
+    # Compute CS Flag
+    if CsResidual > Threshold:
+        result = True
+    
+    return result
+    
+def updateCsBuffer(PrevPreproObsInfo, Prn):
+    PrevPreproObsInfo[Prn]["CsBuff"][PrevPreproObsInfo[Prn]["CsIdx"]] = 1
+    PrevPreproObsInfo[Prn]["CsIdx"] += 1
+    PrevPreproObsInfo[Prn]["CsIdx"] %= len(PrevPreproObsInfo[Prn]["CsBuff"])
+
+def updatePrevPrepro(PreproObsInfo, PrevPreproObsInfo):
+    for prn in range(1, Const.MAX_NUM_SATS_CONSTEL + 1):
+        SatLabel = "G" + "%02d" % int(prn)
+        # Check if the satellite is in view
+        # ------------------------------------------------------------------------
+        if not SatLabel in PreproObsInfo:
+            continue
+
+        PrevPreproObsInfo[SatLabel]["PrevEpoch"] = PreproObsInfo[SatLabel]["Sod"]
+        PrevPreproObsInfo[SatLabel]["L1_n_3"] = PrevPreproObsInfo[SatLabel]["L1_n_2"]
+        PrevPreproObsInfo[SatLabel]["L1_n_2"] = PrevPreproObsInfo[SatLabel]["L1_n_1"]
+        PrevPreproObsInfo[SatLabel]["L1_n_1"] = PreproObsInfo[SatLabel]["L1"]
+        PrevPreproObsInfo[SatLabel]["t_n_3"] = PrevPreproObsInfo[SatLabel]["t_n_2"]
+        PrevPreproObsInfo[SatLabel]["t_n_2"] = PrevPreproObsInfo[SatLabel]["t_n_1"]
+        PrevPreproObsInfo[SatLabel]["t_n_1"] = PreproObsInfo[SatLabel]["Sod"]
 
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
@@ -105,8 +151,8 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
     # Initialize output
     PreproObsInfo = OrderedDict({})
-    GapCounter = {Sat[ObsIdx["PRN"]]:0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
-    ResetHatchFilter = {Sat[ObsIdx["PRN"]]:False for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
+    GapCounter = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
+    ResetHatchFilter = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
 
     # Number of satellites visibles for each constellation
     NSATS_GPS = NSATS_GAL = 0
@@ -137,7 +183,7 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             "SmoothC1": 0.0,        # Smoothed L1CA 
             "GeomFree": 0.0,        # Geom-free in Phases
             "GeomFreePrev": 0.0,    # t-1 Geom-free in Phases
-            "ValidL1": 1,          # L1 Measurement Status
+            "ValidL1": 1,           # L1 Measurement Status
             "RejectionCause": 0,    # Cause of rejection flag
             "StatusL2": 0,          # L2 Measurement Status
             "Status": 0,            # L1 Smoothing status
@@ -160,6 +206,12 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         SatPreproObsInfo["Doy"] = int(SatObs[ObsIdx["DOY"]])
         # Get Elevation
         SatPreproObsInfo["Elevation"] = float(SatObs[ObsIdx["ELEV"]])
+        # Get Azimuth
+        SatPreproObsInfo["Azimuth"] = float(SatObs[ObsIdx["AZIM"]])
+        # Get C1
+        SatPreproObsInfo["C1"] = float(SatObs[ObsIdx["C1"]])
+        # Get S1
+        SatPreproObsInfo["S1"] = float(SatObs[ObsIdx["S1"]])
 
         # Prepare output for the satellite
         PreproObsInfo[SatLabel] = SatPreproObsInfo
@@ -194,23 +246,26 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         # ------------------------------------------------------------------------
         if PreproObsInfo[SatLabel]["Elevation"] < Conf["RCVR_MASK"]:
             PreproObsInfo[SatLabel]["ValidL1"] = 0
-            PreproObsInfo[SatLabel]["RejectionCause"] = 2
-
+            PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MASKANGLE"]
+            continue
+            
         # Measurement quality monitoring 
 
         # Check Signal To Noise Ratio in front of Minimum by configuration (if activated) 
         # ------------------------------------------------------------------------------
         # [PETRUS-PPVE-REQ-020]
-        
+
         if Conf["MIN_CNR"][0] == 1 and PreproObsInfo[SatLabel]["S1"] < Conf["MIN_CNR"][1]:
             PreproObsInfo[SatLabel]["ValidL1"] = 0
-            PreproObsInfo[SatLabel]["RejectionCause"] = 3
+            PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MIN_CNR"]
+            continue
 
         # Check Pseudo-ranges Out-of-Range in front of Maximum by configuration 
         # ------------------------------------------------------------------------------
         if Conf["MAX_PSR_OUTRNG"][0] == 1 and PreproObsInfo[SatLabel]["C1"] > Conf["MAX_PSR_OUTRNG"][1]:
             PreproObsInfo[SatLabel]["ValidL1"] = 0
-            PreproObsInfo[SatLabel]["RejectionCause"] = 4
+            PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MAX_PSR_OUTRNG"]
+            continue
 
         # Check Measurement Data gaps 
         # ------------------------------------------------------------------------------
@@ -222,9 +277,33 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             # Check if gap is longer than the allowed maximum
             if GapCounter[prn] > Conf["HATCH_GAP_TH"]:
                 # Reset filter
-                ResetHatchFilter[prn] = True
+                print('[TESTING][runPreProcMeas]' + ' epoch' + ObsInfo[0][0] + ' Satellite ' + SatLabel + ' Hatch filter reset (gap=' + "%.2f" % DeltaT + ')')
+                ResetHatchFilter[prn] = 1
 
-        PrevPreproObsInfo[SatLabel]["PrevEpoch"] = PreproObsInfo[SatLabel]["Sod"]
+        # Check Cycle Slips, if activated, with Third Order Difference algorithm 
+        # -------------------------------------------------------------------------------
+        if (not ResetHatchFilter[prn]) and (Conf["MIN_NCS_TH"][0] == 1):
+            # Check the existence of a Cycle Slip with 3rd order difference
+            # IMPORTANT: The Phase shall not be propagated with Not Valid measurement
+            # If some of the 3 last measurements were Not Valid, the most recent
+            # valid measurements shall be used to propagate the Phase
+            CsFlag = detectCycleSlips(PreproObsInfo, PrevPreproObsInfo, prn, Conf["MIN_NCS_TH"][1])
+            # If L1 measurement diverged from the propagated value
+            if CsFlag == True:
+                # Set measurement as Not Valid
+                PreproObsInfo[SatLabel]["ValidL1"] = 0
+                # Cumulate the Number of Consecutive Cycle Slips
+                updateCsBuffer(PrevPreproObsInfo)
+            # If three last consecutive flags were raised
+            # print(sum(PrevPreproObsInfo[SatLabel]["CsBuff"]))
+            if sum(PrevPreproObsInfo[SatLabel]["CsBuff"]) == Conf["MIN_NCS_TH"][2]:
+                # Reset filter
+                ResetHatchFilter[prn] = 1
+                print('[TESTING][runPreProcMeas]' + ' epoch' + ObsInfo[0][0] + ' Satellite ' + SatLabel + ' Hatch filter reset (CS)')
+            else:
+                PrevPreproObsInfo[SatLabel]["CsBuff"] = [0 for x in range(0,3)]
+
+    updatePrevPrepro(PreproObsInfo, PrevPreproObsInfo)
 
     return PreproObsInfo
 
