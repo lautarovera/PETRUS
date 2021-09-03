@@ -122,6 +122,15 @@ def updatePrevPrepro(PreproObs, PrevPreproObs, ResetHatchFilter):
         PrevPreproObs["t_n_2"] = 0
         PrevPreproObs["t_n_1"] = PreproObs["Sod"]
 
+def resetHatchFilter(PreproObs, PrevPreproObs):
+    PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
+    PrevPreproObs["L1_n_3"] = 0
+    PrevPreproObs["L1_n_2"] = 0
+    PrevPreproObs["L1_n_1"] = PreproObs["L1"]
+    PrevPreproObs["t_n_3"] = 0
+    PrevPreproObs["t_n_2"] = 0
+    PrevPreproObs["t_n_1"] = PreproObs["Sod"]
+
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
     # Purpose: preprocess GNSS raw measurements from OBS file
@@ -286,6 +295,8 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         else:
             # Check Measurement Data gaps 
             # ------------------------------------------------------------------------------
+            # [PETRUS-PPVE-REQ-090]
+
             DeltaT = int(PreproObsInfo[SatLabel]["Sod"] - PrevPreproObsInfo[SatLabel]["PrevEpoch"])
 
             if DeltaT > int(Conf["SAMPLING_RATE"]):
@@ -296,13 +307,14 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
                 if GapCounter[prn] > Conf["HATCH_GAP_TH"]:
                     # Reset filter
                     ResetHatchFilter[prn] = 1
-
                     if PrevPreproObsInfo[SatLabel]["PrevRej"] != REJECTION_CAUSE["MASKANGLE"]:
                         PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["DATA_GAP"]
                         print('[TESTING][runPreProcMeas]' + ' SoD ' + ObsInfo[0][0] + ' Satellite ' + SatLabel + ' Hatch filter reset (gap=' + "%.2f" % DeltaT + ')')
 
             # Check Cycle Slips, if activated, with Third Order Difference algorithm 
             # -------------------------------------------------------------------------------
+            # [PETRUS-PPVE-REQ-080]
+
             if (ResetHatchFilter[prn] == 0) and (Conf["MIN_NCS_TH"][0] == 1):
                 # Check the existence of a Cycle Slip with 3rd order difference
                 # IMPORTANT: The Phase shall not be propagated with Not Valid measurement
@@ -323,6 +335,32 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
                     ResetHatchFilter[prn] = 1
                     PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["CYCLE_SLIP"]
                     print('[TESTING][runPreProcMeas]' + ' SoD ' + ObsInfo[0][0] + ' Satellite ' + SatLabel + ' Hatch filter reset (CS)')
+            
+            # Hatch filter (re)initialization
+            #-------------------------------------------------------------------------------
+            if ResetHatchFilter[prn] == 1:
+                # Reset filter
+                resetHatchFilter(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel])
+
+            # Perform the Code Carrier Smoothing with a Hatch Filter of 100 seconds
+            #-------------------------------------------------------------------------------
+            # [PETRUS-PPVE-REQ-100]
+
+            if PrevPreproObsInfo[SatLabel]["PrevRej"] != REJECTION_CAUSE["MASKANGLE"]:
+                # Count the number of seconds from Smoothing Start
+                PrevPreproObsInfo[SatLabel]["Ksmooth"] = int(PrevPreproObsInfo[SatLabel]["Ksmooth"]) + DeltaT
+
+                # Update the Smoothing time if below the 100 seconds
+                SmoothingTime = int(PrevPreproObsInfo[SatLabel]["Ksmooth"])
+
+                # Update the Smoothing time if above the 100 seconds
+                if PrevPreproObsInfo[SatLabel]["Ksmooth"] >= Conf["HATCH_TIME"]:
+                    SmoothingTime = int(Conf["HATCH_TIME"])
+
+                # Weighting factor of the smoothing filter
+                Alpha = DeltaT / SmoothingTime
+                # Compute the new Smoothed Code
+                PreproObsInfo[SatLabel]["SmoothC1"] = Alpha * PreproObsInfo[SatLabel]["C1"] + (1 - Alpha) * PrevPreproObsInfo[SatLabel]["PrevSmoothC1"]
 
         updatePrevPrepro(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel], ResetHatchFilter[prn])
 
