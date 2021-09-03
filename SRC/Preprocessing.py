@@ -99,28 +99,13 @@ def updateCsBuffer(PrevPreproObs):
     PrevPreproObs["CsIdx"] += 1
     PrevPreproObs["CsIdx"] %= len(PrevPreproObs["CsBuff"])
 
-def updatePrevPrepro(PreproObs, PrevPreproObs, ResetHatchFilter):
-    # Propagate the current valid measurements to previous epoch
-    # -------------------------------------------------------------------------------
-    PrevPreproObs["PrevRej"] = PreproObs["RejectionCause"]
-    
-    if PreproObs["ValidL1"] == 1:
-        PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
-        PrevPreproObs["L1_n_3"] = PrevPreproObs["L1_n_2"]
-        PrevPreproObs["L1_n_2"] = PrevPreproObs["L1_n_1"]
-        PrevPreproObs["L1_n_1"] = PreproObs["L1"]
-        PrevPreproObs["t_n_3"] = PrevPreproObs["t_n_2"]
-        PrevPreproObs["t_n_2"] = PrevPreproObs["t_n_1"]
-        PrevPreproObs["t_n_1"] = PreproObs["Sod"]
+def computePhaseRate(L1, PrevL1Meters, dT):
+    PhaseRate = 0
 
-    if ResetHatchFilter == 1:
-        PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
-        PrevPreproObs["L1_n_3"] = 0
-        PrevPreproObs["L1_n_2"] = 0
-        PrevPreproObs["L1_n_1"] = PreproObs["L1"]
-        PrevPreproObs["t_n_3"] = 0
-        PrevPreproObs["t_n_2"] = 0
-        PrevPreproObs["t_n_1"] = PreproObs["Sod"]
+    if dT > 0:
+        PhaseRate = (int(L1) - int(PrevL1Meters)) / int(dT)
+
+    return PhaseRate
 
 def resetHatchFilter(PreproObs, PrevPreproObs):
     PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
@@ -130,6 +115,32 @@ def resetHatchFilter(PreproObs, PrevPreproObs):
     PrevPreproObs["t_n_3"] = 0
     PrevPreproObs["t_n_2"] = 0
     PrevPreproObs["t_n_1"] = PreproObs["Sod"]
+
+def updatePrevPrepro(PreproObs, PrevPreproObs, ResetHatchFilter, PhaseRate):
+    # Propagate the current valid measurements to previous epoch
+    # -------------------------------------------------------------------------------
+    PrevPreproObs["PrevRej"] = PreproObs["RejectionCause"]
+
+    if PreproObs["ValidL1"] == 1:
+        PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
+        PrevPreproObs["L1_n_3"] = PrevPreproObs["L1_n_2"]
+        PrevPreproObs["L1_n_2"] = PrevPreproObs["L1_n_1"]
+        PrevPreproObs["L1_n_1"] = PreproObs["L1"]
+        PrevPreproObs["t_n_3"] = PrevPreproObs["t_n_2"]
+        PrevPreproObs["t_n_2"] = PrevPreproObs["t_n_1"]
+        PrevPreproObs["t_n_1"] = PreproObs["Sod"]
+        PrevPreproObs["PrevL1"] = PreproObs["L1Meters"]
+        PrevPreproObs["PrevSmoothC1"] = PreproObs["SmoothC1"]
+        PrevPreproObs["PrevPhaseRateL1"] = PhaseRate
+
+    if ResetHatchFilter == 1:
+        PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
+        PrevPreproObs["L1_n_3"] = 0
+        PrevPreproObs["L1_n_2"] = 0
+        PrevPreproObs["L1_n_1"] = PreproObs["L1"]
+        PrevPreproObs["t_n_3"] = 0
+        PrevPreproObs["t_n_2"] = 0
+        PrevPreproObs["t_n_1"] = PreproObs["Sod"]
 
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
@@ -178,6 +189,7 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     PreproObsInfo = OrderedDict({})
     GapCounter = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
     ResetHatchFilter = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
+    PhaseRate = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
 
     # Number of satellites visibles for each constellation
     NSATS_GPS = NSATS_GAL = 0
@@ -237,6 +249,8 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         SatPreproObsInfo["C1"] = float(SatObs[ObsIdx["C1"]])
         # Get L1
         SatPreproObsInfo["L1"] = float(SatObs[ObsIdx["L1"]])
+        # Get L1 in meters
+        SatPreproObsInfo["L1Meters"] = float(SatObs[ObsIdx["L1"]]) * Const.GPS_L1_WAVE
         # Get S1
         SatPreproObsInfo["S1"] = float(SatObs[ObsIdx["S1"]])
 
@@ -274,8 +288,6 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
         if PreproObsInfo[SatLabel]["Elevation"] < Conf["RCVR_MASK"]:
             PreproObsInfo[SatLabel]["ValidL1"] = 0
             PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MASKANGLE"]
-            
-        # Measurement quality monitoring 
 
         # Check Signal To Noise Ratio in front of Minimum by configuration (if activated) 
         # ------------------------------------------------------------------------------
@@ -337,13 +349,14 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
                     print('[TESTING][runPreProcMeas]' + ' SoD ' + ObsInfo[0][0] + ' Satellite ' + SatLabel + ' Hatch filter reset (CS)')
             
             # Hatch filter (re)initialization
-            #-------------------------------------------------------------------------------
+            # -------------------------------------------------------------------------------
             if ResetHatchFilter[prn] == 1:
                 # Reset filter
                 resetHatchFilter(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel])
+                pass
 
             # Perform the Code Carrier Smoothing with a Hatch Filter of 100 seconds
-            #-------------------------------------------------------------------------------
+            # -------------------------------------------------------------------------------
             # [PETRUS-PPVE-REQ-100]
 
             if PrevPreproObsInfo[SatLabel]["PrevRej"] != REJECTION_CAUSE["MASKANGLE"]:
@@ -362,7 +375,23 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
                 # Compute the new Smoothed Code
                 PreproObsInfo[SatLabel]["SmoothC1"] = Alpha * PreproObsInfo[SatLabel]["C1"] + (1 - Alpha) * PrevPreproObsInfo[SatLabel]["PrevSmoothC1"]
 
-        updatePrevPrepro(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel], ResetHatchFilter[prn])
+            # Check Phase Rate (if activated)
+            # ------------------------------------------------------------------------------- 
+            # [PETRUS-PPVE-REQ-040]
+            
+            # Compute the Phase Rate in m/s
+            PhaseRate[prn] = computePhaseRate(PreproObsInfo[SatLabel]["L1Meters"], PrevPreproObsInfo[SatLabel]["PrevL1"], DeltaT)
+
+            if Conf["MAX_PHASE_RATE"][0] == 1:
+                # Check Phase Jump
+                if PhaseRate[prn] > Conf["MAX_PHASE_RATE"][1]:
+                    # Reset smoothing filter and raise NOT_VALID flag
+                    PrevPreproObsInfo[SatLabel]["ResetHatchFilter"] = 1
+                    ResetHatchFilter[prn] = 1
+                    PreproObsInfo[SatLabel]["ValidL1"] = 0
+                    PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MAX_PHASE_RATE"]
+
+        updatePrevPrepro(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel], ResetHatchFilter[prn], PhaseRate[prn])
 
     return PreproObsInfo
 
