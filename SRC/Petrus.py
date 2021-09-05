@@ -40,7 +40,7 @@ from InputOutput import generatePreproFile
 from InputOutput import PreproHdr
 from InputOutput import CSNEPOCHS
 from Preprocessing import runPreProcMeas
-# from PreprocessingPlots import generatePreproPlots
+from PreprocessingPlots import generatePreproPlots
 from COMMON.Dates import convertJulianDay2YearMonthDay
 from COMMON.Dates import convertYearMonthDay2Doy
 
@@ -144,7 +144,7 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
             "PrevGeomFree": 0.0,     # Previous Geometry-Free Observable
             "PrevGeomFreeEpoch": 0.0,# Previous Geometry-Free Observable
             "PrevRej": 0,            # Previous Rejection flag
-                                     # ...
+            "GapCounter": 0          # Gap Counter
         } # End of SatPreproObsInfo
 
         # Open OBS file
@@ -198,8 +198,7 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
             PreproObsFile)
 
             # Generate Preprocessing plots
-            # generatePreproPlots(PreproObsFile)
-
+            generatePreproPlots(PreproObsFile)
     # End of JD loop
 
 # End of RCVR loop
