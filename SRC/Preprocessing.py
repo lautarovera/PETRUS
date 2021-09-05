@@ -107,6 +107,14 @@ def computePhaseRate(L1, PrevL1Meters, dT):
 
     return PhaseRate
 
+def computePhaseRateStep(PhaseRate, PrevPhaseRate, dT):
+    PhaseRateStep = 0
+
+    if dT > 0:
+        PhaseRate = (int(PhaseRate) - int(PrevPhaseRate)) / int(dT)
+
+    return PhaseRateStep
+
 def resetHatchFilter(PreproObs, PrevPreproObs):
     PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
     PrevPreproObs["L1_n_3"] = 0
@@ -190,6 +198,7 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     GapCounter = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
     ResetHatchFilter = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
     PhaseRate = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
+    PhaseRateStep = {int(Sat[ObsIdx["PRN"]]):0 for Sat in ObsInfo if Sat[ObsIdx["CONST"]] == "G"}
 
     # Number of satellites visibles for each constellation
     NSATS_GPS = NSATS_GAL = 0
@@ -382,15 +391,31 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             # Compute the Phase Rate in m/s
             PhaseRate[prn] = computePhaseRate(PreproObsInfo[SatLabel]["L1Meters"], PrevPreproObsInfo[SatLabel]["PrevL1"], DeltaT)
 
-            if Conf["MAX_PHASE_RATE"][0] == 1:
+            if Conf["MAX_PHASE_RATE"][0] == 1 and PreproObsInfo[SatLabel]["ValidL1"] == 1:
                 # Check Phase Jump
                 if PhaseRate[prn] > Conf["MAX_PHASE_RATE"][1]:
-                    # Reset smoothing filter and raise NOT_VALID flag
+                    # Reset smoothing filter and raise not valid flag
                     PrevPreproObsInfo[SatLabel]["ResetHatchFilter"] = 1
                     ResetHatchFilter[prn] = 1
                     PreproObsInfo[SatLabel]["ValidL1"] = 0
                     PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MAX_PHASE_RATE"]
+            
+            # Check Phase Rate Step (if activated) 
+            # -------------------------------------------------------------------------------
+            # [PETRUS-PPVE-REQ-050]
 
+            # Compute the Phase Rate Step in m/s2
+            PhaseRateStep[prn] = computePhaseRateStep(PhaseRate[prn], PrevPreproObsInfo[SatLabel]["PrevPhaseRateL1"], DeltaT)
+
+            if Conf["MAX_PHASE_RATE_STEP"][0] == 1 and PreproObsInfo[SatLabel]["ValidL1"] == 1:
+                # Check Phase Rate Jump
+                if PhaseRateStep[prn] > Conf["MAX_PHASE_RATE_STEP"][1]:
+                    # Reset smoothing filter and raise not valid flag
+                    PrevPreproObsInfo[SatLabel]["ResetHatchFilter"] = 1
+                    ResetHatchFilter[prn] = 1
+                    PreproObsInfo[SatLabel]["ValidL1"] = 0
+                    PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MAX_PHASE_RATE_STEP"]
+            
         updatePrevPrepro(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel], ResetHatchFilter[prn], PhaseRate[prn])
 
     return PreproObsInfo
