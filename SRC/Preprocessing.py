@@ -116,17 +116,24 @@ def computeStep(Rate, PrevRate, dT):
     return Step
 
 def resetHatchFilter(PreproObs, PrevPreproObs):
-    PreproObs["SmoothC1"] = PreproObs["C1"]
     PrevPreproObs["Ksmooth"] = 0
     PrevPreproObs["PrevSmoothC1"] = 0
+    PrevPreproObs["PrevPhaseRateL1"] = 0
+    PrevPreproObs["PrevRangeRateL1"] = 0
+    PrevPreproObs["L1_n_3"] = 0
+    PrevPreproObs["L1_n_2"] = 0
+    PrevPreproObs["L1_n_1"] = PreproObs["L1"]
+    PrevPreproObs["t_n_3"] = 0
+    PrevPreproObs["t_n_2"] = 0
+    PrevPreproObs["t_n_1"] = PreproObs["Sod"]
 
-def updatePrevPrepro(PreproObs, PrevPreproObs, ResetHatchFilter, PhaseRate):
+def updatePrevPrepro(PreproObs, PrevPreproObs):
     # Propagate the current valid measurements to previous epoch
     # -------------------------------------------------------------------------------
     PrevPreproObs["PrevRej"] = PreproObs["RejectionCause"]
-
-    if PreproObs["ValidL1"] == 1:
-        PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
+    PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
+    
+    if PreproObs["ValidL1"] == 0 and PrevPreproObs["ResetHatchFilter"] == 0:
         PrevPreproObs["L1_n_3"] = PrevPreproObs["L1_n_2"]
         PrevPreproObs["L1_n_2"] = PrevPreproObs["L1_n_1"]
         PrevPreproObs["L1_n_1"] = PreproObs["L1"]
@@ -135,16 +142,9 @@ def updatePrevPrepro(PreproObs, PrevPreproObs, ResetHatchFilter, PhaseRate):
         PrevPreproObs["t_n_1"] = PreproObs["Sod"]
         PrevPreproObs["PrevL1"] = PreproObs["L1Meters"]
         PrevPreproObs["PrevSmoothC1"] = PreproObs["SmoothC1"]
-        PrevPreproObs["PrevPhaseRateL1"] = PhaseRate
-   
-    if ResetHatchFilter == 1:
-        PrevPreproObs["PrevEpoch"] = PreproObs["Sod"]
-        PrevPreproObs["L1_n_3"] = 0
-        PrevPreproObs["L1_n_2"] = 0
-        PrevPreproObs["L1_n_1"] = PreproObs["L1"]
-        PrevPreproObs["t_n_3"] = 0
-        PrevPreproObs["t_n_2"] = 0
-        PrevPreproObs["t_n_1"] = PreproObs["Sod"]
+        PrevPreproObs["PrevPhaseRateL1"] = PreproObs["PhaseRateL1"]
+        PrevPreproObs["PrevRangeRateL1"] = PreproObs["RangeRateL1"]
+
 
 def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
     
@@ -389,9 +389,9 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             # Check Phase Rate (if activated)
             # ------------------------------------------------------------------------------- 
             # [PETRUS-PPVE-REQ-040]
-            
+
             # Compute the Phase Rate in m/s
-            PhaseRate[prn] = computeRate(PreproObsInfo[SatLabel]["L1Meters"], PrevPreproObsInfo[SatLabel]["PrevL1"], DeltaT)
+            PreproObsInfo[SatLabel]["PhaseRateL1"] = computeRate(PreproObsInfo[SatLabel]["L1Meters"], PrevPreproObsInfo[SatLabel]["PrevL1"], DeltaT)
 
             if Conf["MAX_PHASE_RATE"][0] == 1 and PreproObsInfo[SatLabel]["ValidL1"] == 1 and ResetHatchFilter[prn] == 0:
                 # Check Phase Jump
@@ -406,11 +406,11 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             # [PETRUS-PPVE-REQ-050]
 
             # Compute the Phase Rate Step in m/s2
-            PhaseRateStep[prn] = computeStep(PhaseRate[prn], PrevPreproObsInfo[SatLabel]["PrevPhaseRateL1"], DeltaT)
+            PreproObsInfo[SatLabel]["PhaseRateStepL1"] = computeStep(PreproObsInfo[SatLabel]["PhaseRateL1"], PrevPreproObsInfo[SatLabel]["PrevPhaseRateL1"], DeltaT)
 
             if Conf["MAX_PHASE_RATE_STEP"][0] == 1 and PreproObsInfo[SatLabel]["ValidL1"] == 1 and ResetHatchFilter[prn] == 0:
                 # Check Phase Rate Jump
-                if PhaseRateStep[prn] > Conf["MAX_PHASE_RATE_STEP"][1]:
+                if PreproObsInfo[SatLabel]["PhaseRateStepL1"] > Conf["MAX_PHASE_RATE_STEP"][1]:
                     # Reset smoothing filter and raise not valid flag
                     PrevPreproObsInfo[SatLabel]["ResetHatchFilter"] = 1
                     PreproObsInfo[SatLabel]["ValidL1"] = 0
@@ -421,17 +421,32 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             # [PETRUS-PPVE-REQ-070]
             
             # Compute the Code Rate in m/s as the first derivative of Smoothed Codes
-            CodeRate[prn] = computeRate(PreproObsInfo[SatLabel]["SmoothC1"], PrevPreproObsInfo[SatLabel]["PrevSmoothC1"], DeltaT)
+            PreproObsInfo[SatLabel]["RangeRateL1"] = computeRate(PreproObsInfo[SatLabel]["SmoothC1"], PrevPreproObsInfo[SatLabel]["PrevSmoothC1"], DeltaT)
 
             if Conf["MAX_CODE_RATE"][0] == 1 and PreproObsInfo[SatLabel]["ValidL1"] == 1 and ResetHatchFilter[prn] == 0:
                 # Check Code Jump
-                if CodeRate[prn] > Conf["MAX_CODE_RATE"][1]:
+                if PreproObsInfo[SatLabel]["RangeRateL1"] > Conf["MAX_CODE_RATE"][1]:
                     # Reset smoothing filter and raise not valid flag
                     PrevPreproObsInfo[SatLabel]["ResetHatchFilter"] = 1
                     PreproObsInfo[SatLabel]["ValidL1"] = 0
                     PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MAX_CODE_RATE"]
 
-        updatePrevPrepro(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel], ResetHatchFilter[prn], PhaseRate[prn])
+            # Check Code Rate Step detector (if activated)
+            # -------------------------------------------------------------------------------
+            # [PETRUS-PPVE-REQ-060]
+
+            # Compute the Code Rate step in m/s2 as the second derivative of Smoothed Codes
+            PreproObsInfo[SatLabel]["RangeRateStepL1"] = computeStep(PreproObsInfo[SatLabel]["RangeRateL1"], PrevPreproObsInfo[SatLabel]["PrevRangeRateL1"], DeltaT)
+
+            if Conf["MAX_CODE_RATE_STEP"][0] == 1 and PreproObsInfo[SatLabel]["ValidL1"] == 1 and ResetHatchFilter[prn] == 0:
+                # Check Code Rate Step
+                if PreproObsInfo[SatLabel]["RangeRateStepL1"] > Conf["MAX_CODE_RATE_STEP"][1]:
+                    # Reset smoothing filter and raise not valid flag
+                    PrevPreproObsInfo[SatLabel]["ResetHatchFilter"] = 1
+                    PreproObsInfo[SatLabel]["ValidL1"] = 0
+                    PreproObsInfo[SatLabel]["RejectionCause"] = REJECTION_CAUSE["MAX_CODE_RATE_STEP"]
+
+        updatePrevPrepro(PreproObsInfo[SatLabel], PrevPreproObsInfo[SatLabel])
 
     return PreproObsInfo
 
