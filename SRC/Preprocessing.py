@@ -42,7 +42,6 @@ def getElevationCut(Conf, PreproObs):
     
     if SatsNumberToReject > 0:
         SatsElevation = [Sat["Elevation"] for Sat in PreproObs]
-        print(SatsElevation)
         SatsElevation = sorted(SatsElevation)
         ElevationCut = SatsElevation[SatsNumberToReject]
     
@@ -217,7 +216,6 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             PrevPreproObsInfo[SatLabel]["PrevRej"] = REJECTION_CAUSE["MIN_CNR"]
 
             continue
-            # print('[TESTING][runPreProcMeas]' + ' epoch' + ObsInfo[0][0] + ' Satellite ' + SatLabel + ' Noise Rejection')
 
         # Check Pseudo-ranges Out-of-Range in front of Maximum by configuration 
         # ------------------------------------------------------------------------------
@@ -226,7 +224,6 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
             PreproObs["RejectionCause"] = REJECTION_CAUSE["MAX_PSR_OUTRNG"]
 
             continue
-            
         
         # Check Measurement Data gaps 
         # ------------------------------------------------------------------------------
@@ -272,8 +269,6 @@ def runPreProcMeas(Conf, Rcvr, ObsInfo, PrevPreproObsInfo):
                     PreproObs["RejectionCause"] = REJECTION_CAUSE["CYCLE_SLIP"]
                     # Reset filter
                     PrevPreproObsInfo[SatLabel]["ResetHatchFilter"] = 1
-                    # print('[TESTING][runPreProcMeas]' + ' SoD ' + ObsInfo[0][0] + ' Satellite ' + SatLabel + ' Hatch filter reset (CS)')
-
                 else:
                     PrevPreproObsInfo[SatLabel]["CsIdx"] += 1
                     PrevPreproObsInfo[SatLabel]["CsIdx"] %= Conf["MIN_NCS_TH"][CSNEPOCHS]

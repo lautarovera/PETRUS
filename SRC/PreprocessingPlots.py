@@ -25,7 +25,7 @@ from InputOutput import REJECTION_CAUSE_DESC
 sys.path.append(os.getcwd() + '/' + \
     os.path.dirname(sys.argv[0]) + '/' + 'COMMON')
 from COMMON import GnssConstants
-from COMMON.Plots import generatePlot
+from COMMON.Plots import generatePlot, generateChallengePlot
 import numpy as np
 from collections import OrderedDict
 
@@ -84,7 +84,7 @@ def plotSatVisibility(PreproObsFile, PreproObsData):
     PlotConf["xDataNotConv"] = {}
     PlotConf["yDataNotConv"] = {}
     PlotConf["zDataNotConv"] = {}
-    for prn in sorted(unique(PreproObsData[PreproIdx["PRN"]])):
+    for prn in unique(PreproObsData[PreproIdx["PRN"]]):
         Label = "G" + ("%02d" % prn)
         FilterCond = ((PreproObsData[PreproIdx["PRN"]] == prn) & (PreproObsData[PreproIdx["STATUS"]] == 1))
         PlotConf["xData"][Label] = PreproObsData[PreproIdx["SOD"]][FilterCond] / GnssConstants.S_IN_H
@@ -103,18 +103,14 @@ def plotSatVisibility(PreproObsFile, PreproObsData):
 def plotNumSats(PreproObsFile, PreproObsData):
     PlotConf = {}
 
+    initPlot(PreproObsFile, PlotConf, "Number of Satellites", "SAT_NUM")
+    
     PlotConf["Type"] = "Lines"
     PlotConf["FigSize"] = (10.4,6.6)
-    PlotConf["Title"] = "Number of Satellites used in PVT from TLSA on Year 2015"\
-        " DoY 006"
 
     PlotConf["yLabel"] = "Number of Satellites"
     PlotConf["yTicks"] = range(0, 15, 2)
     PlotConf["yLim"] = [0, 14]
-
-    PlotConf["xLabel"] = "Hour of Day 0062015"
-    PlotConf["xTicks"] = range(0, 25)
-    PlotConf["xLim"] = [0, 24]
 
     PlotConf["Grid"] = True
     PlotConf["Legend"] = True
@@ -123,6 +119,15 @@ def plotNumSats(PreproObsFile, PreproObsData):
     PlotConf["Marker"] = '-'
     PlotConf["LineWidth"] = 1
 
+    RawSats = []
+    SmoothedSats = []
+
+    for sod in sorted(unique(PreproObsData[PreproIdx["SOD"]])):
+        RawFilterCond = (PreproIdx["SOD"] == sod)
+        SmoothedFilterCond = ((PreproIdx["SOD"] == sod) & (PreproObsData[PreproIdx["STATUS"]] == 1))
+        RawSats.append(len(PreproObsData[PreproIdx["SOD"]][RawFilterCond]))
+        SmoothedSats.append(len(PreproObsData[PreproIdx["SOD"]][SmoothedFilterCond]))
+
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
     PlotConf["Color"] = {}
@@ -130,16 +135,47 @@ def plotNumSats(PreproObsFile, PreproObsData):
     Label = 0
     PlotConf["Label"][Label] = 'Raw'
     PlotConf["Color"][Label] = 'orange'
-
-
-    PlotConf["Path"] = sys.argv[1] + '/OUT/POS/' + 'POS_SATS_VS_TIME_TLSA_D006Y15.png'
+    PlotConf["xData"][Label] = PreproObsData[PreproIdx["SOD"]] / GnssConstants.S_IN_H
+    PlotConf["yData"][Label] = RawSats
+    Label = 1
+    PlotConf["Label"][Label] = 'Smoothed'
+    PlotConf["Color"][Label] = 'green'
+    PlotConf["xData"][Label] = PreproObsData[PreproIdx["SOD"]] / GnssConstants.S_IN_H
+    PlotConf["yData"][Label] = SmoothedSats
 
     # Call generatePlot from Plots library
     generatePlot(PlotConf)
 
 # Plot Satellite Polar View
 def plotSatPolarView(PreproObsFile, PreproObsData):
-    pass
+    PlotConf = {}
+
+    initPlot(PreproObsFile, PlotConf, "Satellite Polar View", "SAT_POLAR_VIEW")
+
+    PlotConf["Type"] = "Lines"
+    PlotConf["FigSize"] = (10,10)
+
+    PlotConf["zLabel"] = "GPS-PRN"
+
+    PlotConf["Grid"] = True
+
+    PlotConf["Marker"] = '.'
+    PlotConf["LineWidth"] = 0.5
+
+    PlotConf["ColorBar"] = "gnuplot"
+    PlotConf["ColorBarLabel"] = "GPS-PRN"
+    PlotConf["ColorBarMin"] = 0
+    PlotConf["ColorBarMax"] = 32
+
+    PlotConf["tData"] = {}
+    PlotConf["rData"] = {}
+    PlotConf["zData"] = {}
+    PlotConf["tData"] = np.deg2rad(PreproObsData[PreproIdx["AZIM"]])
+    PlotConf["rData"] = PreproObsData[PreproIdx["ELEV"]]
+    PlotConf["zData"] = PreproObsData[PreproIdx["PRN"]]
+
+    # Call generatePlot from Plots library
+    generateChallengePlot(PlotConf)
 
 # Plot C1 - C1Smoothed
 def plotC1C1Smoothed(PreproObsFile, PreproObsData):
@@ -187,6 +223,11 @@ def generatePreproPlots(PreproObsFile):
     plotSatVisibility(PreproObsFile, PreproObsData)
 
     PreproObsData = read_csv(PreproObsFile, delim_whitespace=True, skiprows=1, header=None,\
-    usecols=[PreproIdx["SOD"], PreproIdx["VALID"]])
+    usecols=[PreproIdx["SOD"], PreproIdx["STATUS"]])
 
     plotNumSats(PreproObsFile, PreproObsData)
+
+    PreproObsData = read_csv(PreproObsFile, delim_whitespace=True, skiprows=1, header=None,\
+    usecols=[PreproIdx["ELEV"], PreproIdx["AZIM"], PreproIdx["PRN"]])
+
+    plotSatPolarView(PreproObsFile, PreproObsData)
