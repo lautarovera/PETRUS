@@ -218,15 +218,17 @@ def generateLinesPlot(PlotConf):
 
         for Label in PlotConf["yData"].keys():
             if "ColorBar" in PlotConf:
-                if "Color" in PlotConf:
-                    color = PlotConf["Color"]
-                else:
-                    color = cmap(normalize(np.array(PlotConf["zData"][Label])))
+                if "NotConv" in PlotConf and PlotConf["NotConv"] == True:
+                    ax.scatter(PlotConf["xDataNotConv"][Label], PlotConf["yDataNotConv"][Label], 
+                    marker = PlotConf["Marker"],
+                    linewidth = LineWidth,
+                    c = 'grey')
 
                 ax.scatter(PlotConf["xData"][Label], PlotConf["yData"][Label], 
                 marker = PlotConf["Marker"],
                 linewidth = LineWidth,
-                c = color)
+                c = cmap(normalize(np.array(PlotConf["zData"][Label]))))
+
             else:
                 ax.plot(PlotConf["xData"][Label], PlotConf["yData"][Label],
                 PlotConf["Marker"],

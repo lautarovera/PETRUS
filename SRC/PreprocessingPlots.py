@@ -68,9 +68,10 @@ def plotSatVisibility(PreproObsFile, PreproObsData):
     PlotConf["Grid"] = True
     PlotConf["Legend"] = False
     PlotConf["DoubleAxis"] = False
+    PlotConf["NotConv"] = True
 
     PlotConf["Marker"] = 'o'
-    PlotConf["LineWidth"] = 15
+    PlotConf["LineWidth"] = 1.5
 
     PlotConf["ColorBar"] = "gnuplot"
     PlotConf["ColorBarLabel"] = "Elevation [deg]"
@@ -80,16 +81,20 @@ def plotSatVisibility(PreproObsFile, PreproObsData):
     PlotConf["xData"] = {}
     PlotConf["yData"] = {}
     PlotConf["zData"] = {}
-    PlotConf["Status"] = {}
+    PlotConf["xDataNotConv"] = {}
+    PlotConf["yDataNotConv"] = {}
+    PlotConf["zDataNotConv"] = {}
     for prn in sorted(unique(PreproObsData[PreproIdx["PRN"]])):
         Label = "G" + ("%02d" % prn)
-        FilterCond = PreproObsData[PreproIdx["PRN"]] == prn
+        FilterCond = ((PreproObsData[PreproIdx["PRN"]] == prn) & (PreproObsData[PreproIdx["STATUS"]] == 1))
         PlotConf["xData"][Label] = PreproObsData[PreproIdx["SOD"]][FilterCond] / GnssConstants.S_IN_H
         PlotConf["yData"][Label] = PreproObsData[PreproIdx["PRN"]][FilterCond]
         PlotConf["zData"][Label] = PreproObsData[PreproIdx["ELEV"]][FilterCond]
 
-        if PlotConf["Status"][Label] == 0:
-            PlotConf["Color"] = 'grey'
+        FilterCond = ((PreproObsData[PreproIdx["PRN"]] == prn) & (PreproObsData[PreproIdx["STATUS"]] == 0))
+        PlotConf["xDataNotConv"][Label] = PreproObsData[PreproIdx["SOD"]][FilterCond] / GnssConstants.S_IN_H
+        PlotConf["yDataNotConv"][Label] = PreproObsData[PreproIdx["PRN"]][FilterCond]
+        PlotConf["zDataNotConv"][Label] = PreproObsData[PreproIdx["ELEV"]][FilterCond]
 
     # Call generatePlot from Plots library
     generatePlot(PlotConf)
@@ -125,13 +130,7 @@ def plotNumSats(PreproObsFile, PreproObsData):
     Label = 0
     PlotConf["Label"][Label] = 'Raw'
     PlotConf["Color"][Label] = 'orange'
-    PlotConf["xData"][Label] = PosData[POS_IDX["SOD"]] / GnssConstants.S_IN_H
-    PlotConf["yData"][Label] = PosData[POS_IDX["NSATS"]]
-    Label = 1
-    PlotConf["Label"][Label] = 'Smoothed'
-    PlotConf["Color"][Label] = 'green'
-    PlotConf["xData"][Label] = PosData[POS_IDX["SOD"]] / GnssConstants.S_IN_H
-    PlotConf["yData"][Label] = PosData[POS_IDX["PDOP"]]
+
 
     PlotConf["Path"] = sys.argv[1] + '/OUT/POS/' + 'POS_SATS_VS_TIME_TLSA_D006Y15.png'
 
@@ -183,7 +182,7 @@ def generatePreproPlots(PreproObsFile):
     # ----------------------------------------------------------
     # Read the cols we need from PREPRO OBS file
     PreproObsData = read_csv(PreproObsFile, delim_whitespace=True, skiprows=1, header=None,\
-    usecols=[PreproIdx["SOD"], PreproIdx["PRN"], PreproIdx["ELEV"]])
+    usecols=[PreproIdx["SOD"], PreproIdx["PRN"], PreproIdx["ELEV"], PreproIdx["STATUS"]])
 
     plotSatVisibility(PreproObsFile, PreproObsData)
 
