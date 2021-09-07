@@ -1,6 +1,7 @@
 
 import sys, os
 import matplotlib as mpl
+from matplotlib.markers import MarkerStyle
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
@@ -130,11 +131,12 @@ def prepareColorBar(PlotConf, ax, Values):
         for v in Values.values():
             Maxs.append(max(v))
         Max = max(Maxs)
-    try:
-        Step = PlotConf["ColorBarStep"]
-    except:
-        Step = []
+
     normalize = mpl.cm.colors.Normalize(vmin=Min, vmax=Max)
+
+    if "RejectFlag" in PlotConf:
+        bounds = np.linspace(int(Min), int(Max), int(Max + 1))
+        normalize = mpl.colors.BoundaryNorm(bounds, int(Max))
 
     divider = make_axes_locatable(ax)
     # size size% of the plot and gap of pad% from the plot
@@ -211,33 +213,48 @@ def generateLinesPlot(PlotConf):
         for key in PlotConf:
             if key == "LineWidth":
                 LineWidth = PlotConf["LineWidth"]
-            if key == "ColorBar":
+            if key == "ColorBar" and not "RejectFlag" in PlotConf:
                 normalize, cmap = prepareColorBar(PlotConf, ax, PlotConf["zData"])
             if key == "Map" and PlotConf[key] == True:
                 drawMap(PlotConf, ax)
 
         for Label in PlotConf["yData"].keys():
             if "ColorBar" in PlotConf:
-                if "NotConv" in PlotConf and PlotConf["NotConv"] == True:
-                    ax.scatter(PlotConf["xDataNotConv"][Label], PlotConf["yDataNotConv"][Label], 
+                if "RejectFlag" in PlotConf and PlotConf["RejectFlag"] == True:
+                    cmap = mpl.cm.get_cmap(PlotConf["ColorBar"])
+
+                    im = ax.scatter(PlotConf["xData"][Label], PlotConf["yData"][Label], 
+                    marker = 'o', 
+                    s = 2,
+                    linewidth = 8,
+                    c = PlotConf["zData"][Label],
+                    cmap = cmap)
+                else:
+                    if "NotConv" in PlotConf and PlotConf["NotConv"] == True:
+                        ax.scatter(PlotConf["xDataNotConv"][Label], PlotConf["yDataNotConv"][Label], 
+                        marker = PlotConf["Marker"],
+                        s = PlotConf["MarkerSize"],
+                        linewidth = LineWidth,
+                        c = 'grey')
+
+                    ax.scatter(PlotConf["xData"][Label], PlotConf["yData"][Label], 
                     marker = PlotConf["Marker"],
+                    s = PlotConf["MarkerSize"],
                     linewidth = LineWidth,
-                    c = 'grey')
-
-                ax.scatter(PlotConf["xData"][Label], PlotConf["yData"][Label], 
-                marker = PlotConf["Marker"],
-                linewidth = LineWidth,
-                c = cmap(normalize(np.array(PlotConf["zData"][Label]))))
-
+                    c = cmap(normalize(np.array(PlotConf["zData"][Label]))))
             else:
                 ax.plot(PlotConf["xData"][Label], PlotConf["yData"][Label],
                 PlotConf["Marker"],
+                markersize = PlotConf["MarkerSize"],
                 color = PlotConf["Color"][Label],
                 label = PlotConf["Label"][Label],
                 linewidth = LineWidth)
 
         if PlotConf["Legend"]:
-                ax.legend(loc = 'upper right')
+            ax.legend(loc = 'upper right')
+
+        if "RejectFlag" in PlotConf and PlotConf["RejectFlag"] == True:
+            plt.colorbar(im, ticks=range(0, 33), boundaries=range(0, 33), label=PlotConf["ColorBarLabel"])
             
     saveFigure(fig, PlotConf["Path"])
 
@@ -249,7 +266,7 @@ def generatePlot(PlotConf):
 
 def generateChallengePlot(PlotConf):
     fig, ax = plt.subplots(1, 1, figsize = PlotConf["FigSize"],subplot_kw={'projection': 'polar'})
-    rticks = np.arange(0, 91, 10)
+    rticks = np.arange(0, 100, 10)
 
     #ax.plot(PlotConf["tData"], PlotConf["rData"])
     ax.set_rmax(90)
@@ -272,16 +289,14 @@ def generateChallengePlot(PlotConf):
             LineWidth = PlotConf["LineWidth"]
 
     cmap = mpl.cm.get_cmap(PlotConf["ColorBar"])
-    norm = mpl.cm.colors.Normalize(vmin=0, vmax=32)
 
     im = ax.scatter(PlotConf["tData"], PlotConf["rData"],
     marker = PlotConf["Marker"],
+    s = PlotConf["MarkerSize"],
     linewidth = LineWidth,
     c = PlotConf["zData"],
     cmap = cmap)
-    
-    #fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, )
-    plt.colorbar(im, ticks=range(0, 33, 1), label=PlotConf["zLabel"])
 
+    plt.colorbar(im, ticks=range(0, 33), label=PlotConf["zLabel"])
 
     saveFigure(fig, PlotConf["Path"])
