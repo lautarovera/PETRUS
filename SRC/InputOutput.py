@@ -97,7 +97,6 @@ PreproIdx["PHASE ACC"]=16
 PreproIdx["GEOM FREE"]=17
 PreproIdx["VTEC RATE"]=18
 PreproIdx["iAATR"]=19
-PreproIdx["NSATS"]=20
 
 # Rejection causes flags
 REJECTION_CAUSE = OrderedDict({})
