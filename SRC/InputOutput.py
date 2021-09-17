@@ -63,6 +63,68 @@ ObsIdx["L2"]=10
 ObsIdx["S1"]=11
 ObsIdx["S2"]=12
 
+# SAT file columns
+SatIdx=OrderedDict({})
+SatIdx["SOD"]=0
+SatIdx["DOY"]=1
+SatIdx["CONST"]=2
+SatIdx["PRN"]=3
+SatIdx["ELEV"]=4
+SatIdx["AZIM"]=5
+SatIdx["SAT-X"]=6
+SatIdx["SAT-Y"]=7
+SatIdx["SAT-Z"]=8
+SatIdx["VEL-X"]=9
+SatIdx["VEL-Y"]=10
+SatIdx["VEL-Z"]=11
+SatIdx["SAT-CLK"]=12
+SatIdx["TGD"]=13
+SatIdx["FC"]=14
+SatIdx["LTC-B"]=15
+SatIdx["LTC-X"]=16
+SatIdx["LTC-Y"]=17
+SatIdx["LTC-Z"]=18
+SatIdx["UDREI"]=19
+SatIdx["SIGMAUDRE"]=20
+SatIdx["DELTAUDRE"]=21
+SatIdx["RSS"]=22
+SatIdx["EPS-FC"]=23
+SatIdx["EPS-RRC"]=24
+SatIdx["EPS-LTC"]=25
+SatIdx["EPS-ER"]=26
+
+# LOS file columns
+LosIdx=OrderedDict({})
+LosIdx["SOD"]=0
+LosIdx["DOY"]=1
+LosIdx["CONST"]=2
+LosIdx["PRN"]=3
+LosIdx["ELEV"]=4
+LosIdx["AZIM"]=5
+LosIdx["FLAG"]=6
+LosIdx["IPPLON"]=7
+LosIdx["IPPLAT"]=8
+LosIdx["INTERP"]=9
+LosIdx["IGP_NE_LON"]=10
+LosIdx["IGP_NE_LAT"]=11
+LosIdx["GIVD_NE"]=12
+LosIdx["GIVE_NE"]=13
+LosIdx["IGP_NW_LON"]=14
+LosIdx["IGP_NW_LAT"]=15
+LosIdx["GIVD_NW"]=16
+LosIdx["GIVE_NW"]=17
+LosIdx["IGP_SW_LON"]=18
+LosIdx["IGP_SW_LAT"]=19
+LosIdx["GIVD_SW"]=20
+LosIdx["GIVE_SW"]=21
+LosIdx["IGP_SE_LON"]=22
+LosIdx["IGP_SE_LAT"]=23
+LosIdx["GIVD_SE"]=24
+LosIdx["GIVE_SE"]=25
+LosIdx["UISD"]=26
+LosIdx["SUIRE"]=27
+LosIdx["STD"]=28
+
 # Output interfaces
 #----------------------------------------------------------------------
 # PREPRO OBS 
@@ -122,6 +184,47 @@ REJECTION_CAUSE_DESC["7: Maximum Phase Rate"]=7
 REJECTION_CAUSE_DESC["8: Maximum Phase Rate Step"]=8
 REJECTION_CAUSE_DESC["9: Maximum Code Rate"]=9
 REJECTION_CAUSE_DESC["10: Maximum Code Rate Step"]=10
+
+# CORR 
+# Header
+CorrHdr = "\
+#SOD DOY C PRN   ELEV    AZIM     IPPLON   IPPLAT   FLAG  SAT-X         SAT-Y           SAT-Z            SAT-CLK      UISD     STD      CORR-PSR       GEOM-RNGE     PSR-RES       RCVR-CLK     SFLT     SUIRE    STROPO   SAIR  SNOISEDIV  SMP    SUERE   ENTGPS \n"
+
+# Line format
+CorrFmt = "%05d %03d %1s %02d %8.3f %8.3f %8.3f %8.3f %4d %14.3f \
+    %14.3f %14.3f %14.3f %8.3f %8.3f %14.3f %14.3f %10.4f %14.3f %10.4f \
+        %8.4f %8.4f %8.4f %7.3f %7.3f %7.3f %8.4f %8.4f".split()
+
+# File columns
+CorrIdx = OrderedDict({})
+CorrIdx["SOD"]=0
+CorrIdx["DOY"]=1
+CorrIdx["CONST"]=2
+CorrIdx["PRN"]=3
+CorrIdx["ELEV"]=4
+CorrIdx["AZIM"]=5
+CorrIdx["IPPLON"]=6
+CorrIdx["IPPLAT"]=7
+CorrIdx["FLAG"]=8
+CorrIdx["SAT-X"]=9
+CorrIdx["SAT-Y"]=10
+CorrIdx["SAT-Z"]=11
+CorrIdx["SAT-CLK"]=12
+CorrIdx["UISD"]=13
+CorrIdx["STD"]=14
+CorrIdx["CORR-PSR"]=15
+CorrIdx["GEOM-RNGE"]=16
+CorrIdx["PSR-RES"]=17
+CorrIdx["RCVR-CLK"]=18
+CorrIdx["SFLT"]=19
+CorrIdx["SUIRE"]=20
+CorrIdx["STROPO"]=21
+CorrIdx["SAIR"]=22
+CorrIdx["SNOISEDIV"]=23
+CorrIdx["SMP"]=24
+CorrIdx["SUERE"]=25
+CorrIdx["ENTtoGPS"]=26
+
 
 # Input functions
 #----------------------------------------------------------------------
@@ -300,7 +403,7 @@ def readConf(CfgFile):
                         
                         # Scenario Start and End Dates [GPS time in Calendar format]
                         #--------------------------------------------------------------------
-                        # Date format DD/MM/YYYY (e.g: 01/09/2119)
+                        # Date format DD/MM/YYYY (e.g: 01/09/2019)
                         #--------------------------------------------------------------------
                         if Key=='INI_DATE':
                             # Check date format
@@ -1045,3 +1148,181 @@ def generatePreproFile(fpreprobs, PreproObsInfo):
         fpreprobs.write("\n")
 
 # End of generatePreproFile
+
+
+def openInputFile(Path):
+    
+    # Purpose: check existence and open input file
+       
+    # Parameters
+    # ==========
+    # Path: str
+    #         Path to file
+
+    # Returns
+    # =======
+    # f: File descriptor
+    #         Descriptor of the input file
+
+    # Display Message
+    print("INFO: Reading file: %s..." %
+    Path)
+
+    # Try to open the file
+    try:
+        # Open PREPRO OBS file
+        f = open(Path, 'r')
+
+        # Read header line
+        f.readline()
+
+    # If file could not be opened
+    except:
+        # Display error
+        sys.stderr.write("ERROR: In input file: %s...\n" %
+        Path)
+
+    return f
+
+# End of openInputFile()
+
+
+def readInputEpoch(f, ColIdx):
+    
+    # Purpose: read one epoch of inputs files (SAT and LOS)
+       
+    # Parameters
+    # ==========
+    # f: file descriptor
+    #         input file
+    # ColIdx: dict
+    #         Dictionary containing the column index for each parameter
+
+    # Returns
+    # =======
+    # EpochInfo: dict
+    #         dictionary containing the split lines of the file
+    #         EpochInfo["G01"][1] is the second field of the 
+    #         line containing G01 info
+
+    EpochInfo = {}
+    
+    # Read one line
+    Line = f.readline()
+    if(not Line):
+        return {}, -1
+    LineSplit = splitLine(Line)
+    Sod = LineSplit[ColIdx["SOD"]]
+    SodNext = Sod
+
+    while SodNext == Sod:
+        Label = LineSplit[ColIdx["CONST"]] + "%02d" % int(LineSplit[ColIdx["PRN"]])
+        EpochInfo[Label]=LineSplit
+        Pointer = f.tell()
+        Line = f.readline()
+        LineSplit = splitLine(Line)
+        try: 
+            SodNext = LineSplit[ColIdx["SOD"]]
+
+        except:
+            return EpochInfo, -1
+
+    f.seek(Pointer)
+
+    return EpochInfo, int(Sod)
+
+# End of readInputEpoch()
+
+
+def readCorrectInputs(fsat, flos, CurrentSod):
+    
+    # Purpose: read SAT and LOS info for current epoch
+       
+    # Parameters
+    # ==========
+    # fsat: File descriptor
+    #         Descriptor of the SAT input file
+    # flos: File descriptor
+    #         Descriptor of the LOS input file
+    # CurrentSod: int
+    #         Current epoch's SoD
+
+    # Returns
+    # =======
+    # SatInfo: dict
+    #         dictionary containing the split lines of the SAT file
+    #         SatInfo["G01"][1] is the second field of the line
+    #         containing G01 info
+    # LosInfo: dict
+    #         dictionary containing the split lines of the LOS file
+    #         SatInfo["G01"][1] is the second field of the line
+    #         containing G01 info
+
+    # Initialize outputs
+    SatInfo = {}
+    LosInfo = {}
+
+    # Read one epoch of SAT file
+    SatInfo, SodInputs = readInputEpoch(fsat, SatIdx)
+
+    # If SAT file ended, raise error
+    if(SatInfo == {}):
+        sys.stderr.write("ERROR: SAT file ended before SoD %s\n" % CurrentSod)
+        sys.exit(-1)
+
+    # Get SoD read from file
+    SatSod = int(float(SatInfo[list(SatInfo.keys())[0]][SatIdx["SOD"]]))
+
+    # If current SoD was not found in file, warn the user
+    if(SatSod > CurrentSod):
+        sys.stderr.write("WARNING: Data gap at SoD %d in SAT file\n" % CurrentSod)
+        return SatInfo, LosInfo, SodInputs
+
+    # Keep reading lines if Sod wasn't reached
+    while(SatSod < CurrentSod):
+
+        # Read one epoch of SAT file
+        SatInfo, SodInputs = readInputEpoch(fsat, SatIdx)
+
+        # Get SoD read from file
+        SatSod = int(float(SatInfo[list(SatInfo.keys())[0]][SatIdx["SOD"]]))
+
+        # If current SoD was not found in file, warn the user
+        if(SatSod > CurrentSod):
+            sys.stderr.write("WARNING: Data gap at SoD %d in SAT file\n" % CurrentSod)
+            return SatInfo, LosInfo, SodInputs
+
+    # Read one epoch of LOS file
+    LosInfo, SodInputs = readInputEpoch(flos, LosIdx)
+
+    # If LOS file ended, raise error
+    if(LosInfo == []):
+        sys.stderr.write("ERROR: LOS file ended before SoD %s\n" % CurrentSod)
+        sys.exit(-1)
+
+    # Get SoD read from file
+    LosSod = int(float(LosInfo[list(LosInfo.keys())[0]][LosIdx["SOD"]]))
+
+    # If current SoD was not found in file, warn the user
+    if(LosSod > CurrentSod):
+        sys.stderr.write("WARNING: Data gap at SoD %d in LOS file\n" % CurrentSod)
+        return SatInfo, LosInfo, SodInputs
+
+    # Keep reading lines if Sod wasn't reached
+    while(LosSod < CurrentSod):
+
+        # Read one epoch of LOS file
+        LosInfo, SodInputs = readInputEpoch(flos, LosIdx)
+
+        # Get SoD read from file
+        LosSod = int(float(LosInfo[list(LosInfo.keys())[0]][LosIdx["SOD"]]))
+
+        # If current SoD was not found in file, warn the user
+        if(LosSod > CurrentSod):
+            sys.stderr.write("WARNING: Data gap at SoD %d in LOS file\n" % CurrentSod)
+            return SatInfo, LosInfo, SodInputs
+
+    return SatInfo, LosInfo, SodInputs
+
+# End of readCorrectInputs()
+

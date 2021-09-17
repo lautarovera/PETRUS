@@ -35,12 +35,18 @@ from InputOutput import readConf
 from InputOutput import processConf
 from InputOutput import readRcvr
 from InputOutput import createOutputFile
+from InputOutput import openInputFile
 from InputOutput import readObsEpoch
+from InputOutput import readCorrectInputs
 from InputOutput import generatePreproFile
-from InputOutput import PreproHdr
+# from InputOutput import generateCorrFile
+from InputOutput import PreproHdr, CorrHdr
 from InputOutput import CSNEPOCHS
+from InputOutput import ObsIdx
 from Preprocessing import runPreProcMeas
 # from PreprocessingPlots import generatePreproPlots
+# from CorrectionsPlots import generateCorrPlots
+from Corrections import runCorrectMeas
 from COMMON.Dates import convertJulianDay2YearMonthDay
 from COMMON.Dates import convertYearMonthDay2Doy
 
@@ -109,6 +115,10 @@ for Rcvr in RcvrInfo.keys():
             '/INP/OBS/' + "OBS_%s_Y%02dD%03d.dat" % \
                 (Rcvr, Year % 100, Doy)
 
+        # Display Message
+        print("INFO: Reading file: %s..." %
+        ObsFile)
+
         # If Preprocessing outputs are activated
         if Conf["PREPRO_OUT"] == 1:
             # Define the full path and name to the output PREPRO OBS file
@@ -118,6 +128,28 @@ for Rcvr in RcvrInfo.keys():
 
             # Create output file
             fpreprobs = createOutputFile(PreproObsFile, PreproHdr)
+
+        # If Corrected outputs are activated
+        if Conf["CORR_OUT"] == 1:
+            # Define the full path and name to the output CORR file
+            CorrFile = Scen + \
+                '/OUT/CORR/' + "CORR_%s_Y%02dD%03d.dat" % \
+                    (Rcvr, Year % 100, Doy)
+
+            # Create output file
+            fcorr = createOutputFile(CorrFile, CorrHdr)
+
+        # Define the full path and name to the SAT file to read and open the file
+        SatFile = Scen + \
+            '/OUT/SAT/' + "SAT_%s_Y%02dD%03d.dat" % \
+                (Rcvr, Year % 100, Doy)
+        fsat = openInputFile(SatFile)
+
+        # Define the full path and name to the LOS file to read
+        LosFile = Scen + \
+            '/OUT/LOS/' + "LOS_%s_Y%02dD%03d.dat" % \
+                (Rcvr, Year % 100, Doy)
+        flos = openInputFile(LosFile)
 
         # Initialize Variables
         EndOfFile = False
@@ -146,6 +178,7 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
             "PrevRej": 0,            # Previous Rejection flag
                                      # ...
         } # End of SatPreproObsInfo
+        SodInputs = -1
 
         # Open OBS file
         with open(ObsFile, 'r') as fobs:
@@ -175,14 +208,34 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
                         # Generate output file
                         generatePreproFile(fpreprobs, PreproObsInfo)
 
-                    # To be continued in next WP...
+                    # Get SoD
+                    Sod = int(float(ObsInfo[0][ObsIdx["SOD"]]))
 
-                # End of if ObsInfo != []:
+                    # The rest of te analyses are executed every configured sampling rate
+                    if(Sod % Conf["SAMPLING_RATE"] == 0):
+                        # Check if SoD have not already been read
+                        if(SodInputs < Sod):
+                            # Read SAT and LOS info
+                            SatInfo, LosInfo, SodInputs = readCorrectInputs(fsat, flos, Sod)
 
+                        # If data is not available, continue to next epoch
+                        if(SatInfo == [] or LosInfo == []):
+                            continue
+
+                        # Correct measurements and estimate the variances with SBAS information
+                        # ----------------------------------------------------------
+                        CorrInfo = runCorrectMeas(Conf, RcvrInfo[Rcvr], PreproObsInfo, SatInfo, LosInfo)
+
+                        # If CORR outputs are requested
+                        # if Conf["CORR_OUT"] == 1:
+                            # Generate output file
+                            # generateCorrFile(fcorr, CorrInfo)
+
+                # end if ObsInfo != []:
                 else:
                     EndOfFile = True
 
-                # End of if ObsInfo != []:
+                #End of if ObsInfo != []:
                 
             # End of while not EndOfFile:
     
@@ -198,7 +251,23 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
             PreproObsFile)
 
             # Generate Preprocessing plots
-            # generatePreproPlots(PreproObsFile)
+            generatePreproPlots(PreproObsFile)
+
+        # If CORR outputs are requested
+        if Conf["CORR_OUT"] == 1:
+            # Close CORR output file
+            fcorr.close()
+
+            # # Display Message
+            # print("INFO: Reading file: %s and generating CORR figures..." %
+            # CorrFile)
+
+            # # Generate CORR plots
+            # generateCorrPlots(CorrFile, SatFile, RcvrInfo[Rcvr])
+
+        # Close input files
+        fsat.close()
+        flos.close()
 
     # End of JD loop
 
@@ -207,9 +276,6 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
 print( '\n------------------------------------')
 print( '--> END OF PETRUS ANALYSIS')
 print( '------------------------------------')
-
-print( 'Check figures in output folder: PPVE/figures/')
-
 
 #######################################################
 # End of Petrus.py
