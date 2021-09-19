@@ -28,6 +28,7 @@ sys.path.insert(0, Common)
 from collections import OrderedDict
 from COMMON import GnssConstants as Const
 from COMMON import Coordinates as Coord
+from COMMON import Iono
 from InputOutput import RcvrIdx, SatIdx, LosIdx
 import numpy as np
 
@@ -88,7 +89,7 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
     EntGpsN = 0
 
     # Loop over satellites
-    for SatLabel, SatPrepro in PreproObsInfo.items():
+    for prn, SatPrepro in PreproObsInfo.items():
         # If satellite is in convergence
         if(SatPrepro["Status"] == 1):
             # Initialize output info
@@ -139,39 +140,162 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
             SatCorrInfo["Azimuth"] = SatPrepro["Azimuth"]
 
             # If SBAS information is available for current satellite
-            if (SatLabel in SatInfo) and (SatLabel in LosInfo):
+            if (prn in SatInfo) and (prn in LosInfo):
                 # Get IPP Longitude
-                SatCorrInfo["IppLon"] = float(LosInfo[SatLabel][LosIdx["IPPLON"]])
+                SatCorrInfo["IppLon"] = float(LosInfo[prn][LosIdx["IPPLON"]])
                 # Get IPP Latitude
-                SatCorrInfo["IppLat"] = float(LosInfo[SatLabel][LosIdx["IPPLAT"]])
+                SatCorrInfo["IppLat"] = float(LosInfo[prn][LosIdx["IPPLAT"]])
+
+            # If satellite is monitored
+            if (SatInfo[prn][SatIdx["UDREI"]] < 12):
+                # PETRUS-CORR-REQ-010
+
+                # Correct Satellite X Position
+                SatCorrInfo["SatX"] = float(SatInfo[prn][SatIdx["SAT-X"]]) + float(SatInfo[prn][SatIdx["LTC-X"]])
+                # Correct Satellite Y Position
+                SatCorrInfo["SatY"] = float(SatInfo[prn][SatIdx["SAT-Y"]]) + float(SatInfo[prn][SatIdx["LTC-Y"]])
+                # Correct Satellite Z Position
+                SatCorrInfo["SatZ"] = float(SatInfo[prn][SatIdx["SAT-Z"]]) + float(SatInfo[prn][SatIdx["LTC-Z"]])
+                # Calculate DTR
+                DTR = -2 * sqrt(float(SatInfo[prn][SatIdx["SAT-X"]]) ** 2 + float(SatInfo[prn][SatIdx["SAT-Y"]]) ** 2 + float(SatInfo[prn][SatIdx["SAT-Z"]]) ** 2) \
+                        * sqrt(float(SatInfo[prn][SatIdx["VEL-X"]]) ** 2 + float(SatInfo[prn][SatIdx["VEL-Y"]]) ** 2 + float(SatInfo[prn][SatIdx["VEL-Z"]]) ** 2) \
+                        / Const.SPEED_OF_LIGHT
+                # Correct Satellite CLK
+                SatCorrInfo["SatClk"] = float(SatInfo[prn][SatIdx["SAT-CLK"]]) + DTR \
+                                            - float(SatInfo[prn][SatIdx["TGD"]])     \
+                                            + float(SatInfo[prn][SatIdx["FC"]])      \
+                                            + float(SatInfo[prn][SatIdx["LTC-B"]])
+
+                # PETRUS-CORR-REQ-030
+
+                # Error bound estimation
+                if float(SatInfo[prn][SatIdx["RSS"]]) == 0.00:
+                    SatCorrInfo["SigmaFlt"] = ((float(SatInfo[prn][SatIdx["SIGMAUDRE"]]) * float(SatInfo[prn][SatIdx["DELTAUDRE"]])) \
+                                                    + float(SatInfo[prn][SatIdx["EPS-FC"]]) + float(SatInfo[prn][SatIdx["EPS-RRC"]]) \
+                                                    + float(SatInfo[prn][SatIdx["EPS-LTC"]]) + float(SatInfo[prn][SatIdx["EPS-ER"]])) ** 2
+                elif float(SatInfo[prn][SatIdx["RSS"]]) == 1.00:
+                    SatCorrInfo["SigmaFlt"] = (float(SatInfo[prn][SatIdx["SIGMAUDRE"]]) * float(SatInfo[prn][SatIdx["DELTAUDRE"]])) ** 2 \
+                                                    + float(SatInfo[prn][SatIdx["EPS-FC"]]) ** 2 + float(SatInfo[prn][SatIdx["EPS-RRC"]]) ** 2 \
+                                                    + float(SatInfo[prn][SatIdx["EPS-LTC"]]) ** 2 + float(SatInfo[prn][SatIdx["EPS-ER"]]) ** 2
+                else:
+                    pass
+
+                # PETRUS-CORR-REQ-050
+
+                #                  NORTH
+                #           v2..............v1
+                #           .                .
+                #           .                .
+                #           .                .
+                #   WEST    .       IPP      .      EAST
+                #           .        *       .
+                #           .                .
+                #           .                .
+                #           v3..............v4
+                #                  SOUTH
+
+                LonV1 = float(LosInfo[prn][LosIdx["IGP_NE_LON"]])
+                LatV1 = float(LosInfo[prn][LosIdx["IGP_NE_LAT"]])
+                TauV1 = float(LosInfo[prn][LosIdx["GIVD_NE"]])
+                ErrTauV1 = float(LosInfo[prn][LosIdx["GIVE_NE"]])
+
+                LonV2 = float(LosInfo[prn][LosIdx["IGP_NW_LON"]])
+                LatV2 = float(LosInfo[prn][LosIdx["IGP_NW_LAT"]])
+                TauV2 = float(LosInfo[prn][LosIdx["GIVD_NW"]])
+                ErrTauV2 = float(LosInfo[prn][LosIdx["GIVE_NW"]])
+
+                LonV3 = float(LosInfo[prn][LosIdx["IGP_SW_LON"]])
+                LatV3 = float(LosInfo[prn][LosIdx["IGP_SW_LAT"]])
+                TauV3 = float(LosInfo[prn][LosIdx["GIVD_SW"]])
+                ErrTauV3 = float(LosInfo[prn][LosIdx["GIVE_SW"]])
+
+                LonV4 = float(LosInfo[prn][LosIdx["IGP_SE_LON"]])
+                LatV4 = float(LosInfo[prn][LosIdx["IGP_SE_LAT"]])
+                TauV4 = float(LosInfo[prn][LosIdx["GIVD_SE"]])
+                ErrTauV4 = float(LosInfo[prn][LosIdx["GIVE_SE"]])
+
+                LonWest = LonV2
+                LonEast = LonV4
+
+                LatNorth = LatV1
+                LatSouth = LatV3
+
+                Xpp = (SatCorrInfo["IppLon"] - LonWest) / (LonEast - LonWest)
+                Ypp = (SatCorrInfo["IppLat"] - LatSouth) / (LatNorth - LatSouth)
+
+                # Square interpolation
+                if int(LosInfo[prn][LosIdx["INTERP"]]) == 0:
+                    W1 = Xpp * Ypp
+                    W2 = (1 - Xpp) * Ypp
+                    W3 = (1 - Xpp) * (1 - Ypp)
+                    W4 = Xpp * (1 - Ypp)
+
+                # Triangular interpolation, v2 is always the vertex opposite the hypotenuse
+                else:
+                    W1 = Ypp
+                    W2 = 1 - Xpp - Ypp
+                    W3 = Xpp
+                    W4 = 0
+
+                    # Triangular interpolation without v1
+                    if int(LosInfo[prn][LosIdx["INTERP"]]) == 1:
+                        TauV1 = TauV2
+                        ErrTauV1 = ErrTauV2
+
+                        TauV2 = TauV3
+                        ErrTauV2 = ErrTauV3
+
+                        TauV3 = TauV4
+                        ErrTauV3 = ErrTauV4
+
+                    # Triangular interpolation without v2
+                    elif int(LosInfo[prn][LosIdx["INTERP"]]) == 2:
+                        TauV1 = TauV3
+                        ErrTauV1 = ErrTauV3
+
+                        TauV2 = TauV4
+                        ErrTauV2 = ErrTauV4
+
+                        TauV3 = TauV1
+                        ErrTauV3 = ErrTauV1
+
+                    # Triangular interpolation without v3
+                    elif int(LosInfo[prn][LosIdx["INTERP"]]) == 3:
+                        TauV1 = TauV4
+                        ErrTauV1 = ErrTauV4
+
+                        TauV2 = TauV1
+                        ErrTauV2 = ErrTauV1
+
+                        TauV3 = TauV2
+                        ErrTauV3 = ErrTauV2
+
+                    # Triangular interpolation without v4
+                    elif int(LosInfo[prn][LosIdx["INTERP"]]) == 4:
+                        pass
+
+                    # No interpolate
+                    else:
+                        pass
+                
+                # Compute UIVD
+                TauVpp = (W1 * TauV1) + (W2 * TauV2) + (W3 * TauV3) + (W4 * TauV4)
+                # Compute UIVE
+                ErrTauVpp = (W1 * ErrTauV1) + (W2 * ErrTauV2) + (W3 * ErrTauV3) + (W4 * ErrTauV4)
+                # Compute UISD
+                SatCorrInfo["Uisd"] = Iono.computeIonoMappingFunction(SatCorrInfo["Elevation"]) * TauVpp
+                # Compute Sigma UIRE
+                SatCorrInfo["SigmaUire"] = sqrt((Iono.computeIonoMappingFunction(SatCorrInfo["Elevation"]) ** 2) * (ErrTauVpp ** 2))
 
             # Prepare output for the satellite
-            CorrInfo[SatLabel] = SatCorrInfo
+            CorrInfo[prn] = SatCorrInfo
 
         # End of if(SatPrepro["Status"] == 1):
 
-    # End of for SatLabel, SatPrepro in PreproObsInfo.items():
+    # End of for prn, SatPrepro in PreproObsInfo.items():
 
     # Loop over satellites
-    for SatLabel, SatPrepro in PreproObsInfo.items():
-        # If satellite is in convergence
-        if(SatPrepro["Status"] == 1):
-            # PETRUS-CORR-REQ-010
-            
-            # Correct Satellite X Position
-            CorrInfo[SatLabel]["SatX"] = float(SatInfo[SatLabel][SatIdx["SAT-X"]]) + float(SatInfo[SatLabel][SatIdx["LTC-X"]])
-            # Correct Satellite Y Position
-            CorrInfo[SatLabel]["SatY"] = float(SatInfo[SatLabel][SatIdx["SAT-Y"]]) + float(SatInfo[SatLabel][SatIdx["LTC-Y"]])
-            # Correct Satellite Z Position
-            CorrInfo[SatLabel]["SatZ"] = float(SatInfo[SatLabel][SatIdx["SAT-Z"]]) + float(SatInfo[SatLabel][SatIdx["LTC-Z"]])
-            # Calculate DTR
-            DTR = -2 * sqrt(float(SatInfo[SatLabel][SatIdx["SAT-X"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["SAT-Y"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["SAT-Z"]]) ** 2) \
-                     * sqrt(float(SatInfo[SatLabel][SatIdx["VEL-X"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["VEL-Y"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["VEL-Z"]]) ** 2) \
-                     / Const.SPEED_OF_LIGHT
-            # Correct Satellite CLK
-            CorrInfo[SatLabel]["SatClk"] = float(SatInfo[SatLabel][SatIdx["SAT-CLK"]]) + DTR \
-                                         - float(SatInfo[SatLabel][SatIdx["TGD"]])           \
-                                         + float(SatInfo[SatLabel][SatIdx["FC"]])            \
-                                         + float(SatInfo[SatLabel][SatIdx["LTC-B"]])
-            
+    for prn in range(1, Const.MAX_NUM_SATS_CONSTEL + 1):
+        
+
     return CorrInfo
