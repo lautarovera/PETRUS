@@ -19,7 +19,7 @@
 
 # Import External and Internal functions and Libraries
 #----------------------------------------------------------------------
-from math import sqrt
+from math import sin, sqrt
 import sys, os
 # Add path to find all modules
 Common = os.path.dirname(os.path.dirname(
@@ -148,7 +148,9 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
 
             # If satellite is monitored
             if (SatInfo[prn][SatIdx["UDREI"]] < 12):
+                # -------------------
                 # PETRUS-CORR-REQ-010
+                # -------------------
 
                 # Correct Satellite X Position
                 SatCorrInfo["SatX"] = float(SatInfo[prn][SatIdx["SAT-X"]]) + float(SatInfo[prn][SatIdx["LTC-X"]])
@@ -166,7 +168,9 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                                             + float(SatInfo[prn][SatIdx["FC"]])      \
                                             + float(SatInfo[prn][SatIdx["LTC-B"]])
 
+                # -------------------
                 # PETRUS-CORR-REQ-030
+                # -------------------
 
                 # Error bound estimation
                 if float(SatInfo[prn][SatIdx["RSS"]]) == 0.00:
@@ -179,9 +183,13 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                                                     + float(SatInfo[prn][SatIdx["EPS-LTC"]]) ** 2 + float(SatInfo[prn][SatIdx["EPS-ER"]]) ** 2
                 else:
                     pass
-
-                # PETRUS-CORR-REQ-050
-
+                
+                # -----------------------------------------------------------------------
+                # Computation of UISD and Sigma UIRE to comply: 
+                #                                                   - PETRUS-CORR-REQ-050
+                #                                                   - PETRUS-CORR-REQ-060
+                #                                                   - PETRUS-CORR-REQ-070
+                #                                                   - PETRUS-CORR-REQ-080 
                 #                  NORTH
                 #           v2..............v1
                 #           .                .
@@ -193,6 +201,7 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                 #           .                .
                 #           v3..............v4
                 #                  SOUTH
+                # -----------------------------------------------------------------------
 
                 LonV1 = float(LosInfo[prn][LosIdx["IGP_NE_LON"]])
                 LatV1 = float(LosInfo[prn][LosIdx["IGP_NE_LAT"]])
@@ -220,11 +229,15 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                 LatNorth = LatV1
                 LatSouth = LatV3
 
-                Xpp = (SatCorrInfo["IppLon"] - LonWest) / (LonEast - LonWest)
-                Ypp = (SatCorrInfo["IppLat"] - LatSouth) / (LatNorth - LatSouth)
-
                 # Square interpolation
                 if int(LosInfo[prn][LosIdx["INTERP"]]) == 0:
+                    if abs(SatCorrInfo["IppLat"]) < 85: 
+                        Xpp = (SatCorrInfo["IppLon"] - LonWest) / (LonEast - LonWest)
+                        Ypp = (SatCorrInfo["IppLat"] - LatSouth) / (LatNorth - LatSouth)
+                    else:
+                        Ypp = (abs(SatCorrInfo["IppLat"]) - 85.0) / 10.0
+                        Xpp = ((SatCorrInfo["IppLon"] - LonV3) / 90.0) * (1 - 2 * Ypp) + Ypp
+
                     W1 = Xpp * Ypp
                     W2 = (1 - Xpp) * Ypp
                     W3 = (1 - Xpp) * (1 - Ypp)
@@ -232,6 +245,13 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
 
                 # Triangular interpolation, v2 is always the vertex opposite the hypotenuse
                 else:
+                    if abs(SatCorrInfo["IppLat"]) < 75: 
+                        Xpp = (SatCorrInfo["IppLon"] - LonWest) / (LonEast - LonWest)
+                        Ypp = (SatCorrInfo["IppLat"] - LatSouth) / (LatNorth - LatSouth)
+                    else:
+                        Ypp = (abs(SatCorrInfo["IppLat"]) - 85.0) / 10.0
+                        Xpp = ((SatCorrInfo["IppLon"] - LonV3) / 90.0) * (1 - 2 * Ypp) + Ypp
+
                     W1 = Ypp
                     W2 = 1 - Xpp - Ypp
                     W3 = Xpp
@@ -287,15 +307,20 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                 # Compute Sigma UIRE
                 SatCorrInfo["SigmaUire"] = sqrt((Iono.computeIonoMappingFunction(SatCorrInfo["Elevation"]) ** 2) * (ErrTauVpp ** 2))
 
+                # -------------------
+                # PETRUS-CORR-REQ-100
+                # -------------------
+
+                SigmaTVE = 0.12
+                Mpp = 1.001 / sqrt(0.002001 + sin(SatCorrInfo["Elevation"]) ** 2)
+                # Compute Sigma Tropo
+                SatCorrInfo["SigmaTropo"] = SigmaTVE * Mpp
+
             # Prepare output for the satellite
             CorrInfo[prn] = SatCorrInfo
 
         # End of if(SatPrepro["Status"] == 1):
 
     # End of for prn, SatPrepro in PreproObsInfo.items():
-
-    # Loop over satellites
-    for prn in range(1, Const.MAX_NUM_SATS_CONSTEL + 1):
         
-
     return CorrInfo
