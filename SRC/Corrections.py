@@ -19,6 +19,7 @@
 
 # Import External and Internal functions and Libraries
 #----------------------------------------------------------------------
+from math import sqrt
 import sys, os
 # Add path to find all modules
 Common = os.path.dirname(os.path.dirname(
@@ -26,6 +27,7 @@ Common = os.path.dirname(os.path.dirname(
 sys.path.insert(0, Common)
 from collections import OrderedDict
 from COMMON import GnssConstants as Const
+from COMMON import Coordinates as Coord
 from InputOutput import RcvrIdx, SatIdx, LosIdx
 import numpy as np
 
@@ -150,4 +152,26 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
 
     # End of for SatLabel, SatPrepro in PreproObsInfo.items():
 
+    # Loop over satellites
+    for SatLabel, SatPrepro in PreproObsInfo.items():
+        # If satellite is in convergence
+        if(SatPrepro["Status"] == 1):
+            # PETRUS-CORR-REQ-010
+            
+            # Correct Satellite X Position
+            CorrInfo[SatLabel]["SatX"] = float(SatInfo[SatLabel][SatIdx["SAT-X"]]) + float(SatInfo[SatLabel][SatIdx["LTC-X"]])
+            # Correct Satellite Y Position
+            CorrInfo[SatLabel]["SatY"] = float(SatInfo[SatLabel][SatIdx["SAT-Y"]]) + float(SatInfo[SatLabel][SatIdx["LTC-Y"]])
+            # Correct Satellite Z Position
+            CorrInfo[SatLabel]["SatZ"] = float(SatInfo[SatLabel][SatIdx["SAT-Z"]]) + float(SatInfo[SatLabel][SatIdx["LTC-Z"]])
+            # Calculate DTR
+            DTR = -2 * sqrt(float(SatInfo[SatLabel][SatIdx["SAT-X"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["SAT-Y"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["SAT-Z"]]) ** 2) \
+                     * sqrt(float(SatInfo[SatLabel][SatIdx["VEL-X"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["VEL-Y"]]) ** 2 + float(SatInfo[SatLabel][SatIdx["VEL-Z"]]) ** 2) \
+                     / Const.SPEED_OF_LIGHT
+            # Correct Satellite CLK
+            CorrInfo[SatLabel]["SatClk"] = float(SatInfo[SatLabel][SatIdx["SAT-CLK"]]) + DTR \
+                                         - float(SatInfo[SatLabel][SatIdx["TGD"]])           \
+                                         + float(SatInfo[SatLabel][SatIdx["FC"]])            \
+                                         + float(SatInfo[SatLabel][SatIdx["LTC-B"]])
+            
     return CorrInfo
