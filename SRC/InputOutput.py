@@ -1150,6 +1150,62 @@ def generatePreproFile(fpreprobs, PreproObsInfo):
 # End of generatePreproFile
 
 
+def generateCorrFile(fcorr, CorrInfo):
+
+    # Purpose: generate output file with Preprocessing results
+
+    # Parameters
+    # ==========
+    # fpreprobs: file descriptor
+    #         Descriptor for PREPRO OBS output file
+    # CorrInfo: dict
+    #         Dictionary containing Preprocessing info for the 
+    #         current epoch
+
+    # Returns
+    # =======
+    # Nothing
+
+    # Loop over satellites
+    for SatLabel, SatCorrInfo in CorrInfo.items():
+        # Prepare outputs
+        Outputs = OrderedDict({})
+        Outputs["SOD"] = SatCorrInfo["Sod"]
+        Outputs["DOY"] = SatCorrInfo["Doy"]
+        Outputs["CONST"] = SatLabel[0]
+        Outputs["PRN"] = int(SatLabel[1:])
+        Outputs["ELEV"] = SatCorrInfo["Elevation"]
+        Outputs["AZIM"] = SatCorrInfo["Azimuth"]
+        Outputs["IPPLON"] = SatCorrInfo["IppLon"]
+        Outputs["IPPLAT"] = SatCorrInfo["IppLat"]
+        Outputs["FLAG"] = SatCorrInfo["Flag"]
+        Outputs["SAT-X"] = SatCorrInfo["SatX"]
+        Outputs["SAT-Y"] = SatCorrInfo["SatY"]
+        Outputs["SAT-Z"] = SatCorrInfo["SatZ"]
+        Outputs["SAT-CLK"] = SatCorrInfo["SatClk"]
+        Outputs["UISD"] = SatCorrInfo["Uisd"]
+        Outputs["STD"] = SatCorrInfo["Std"]
+        Outputs["CORR-PSR"] = SatCorrInfo["CorrPsr"]
+        Outputs["GEOM-RNGE"] = SatCorrInfo["GeomRange"]
+        Outputs["PSR-RES"] = SatCorrInfo["PsrResidual"]
+        Outputs["RCVR-CLK"] = SatCorrInfo["RcvrClk"]
+        Outputs["SFLT"] = SatCorrInfo["SigmaFlt"]
+        Outputs["SUIRE"] = SatCorrInfo["SigmaUire"]
+        Outputs["STROPO"] = SatCorrInfo["SigmaTropo"]
+        Outputs["SNOISEDIV"] = SatCorrInfo["SigmaNoiseDiv"]
+        Outputs["SMP"] = SatCorrInfo["SigmaMultipath"]
+        Outputs["SUERE"] = SatCorrInfo["SigmaUere"]
+        Outputs["ENTtoGPS"] = SatCorrInfo["EntGps"]
+
+        # Write line
+        for i, result in enumerate(Outputs):
+            fcorr.write(((CorrFmt[i] + " ") % Outputs[result]))
+
+        fcorr.write("\n")
+
+# End of generatePreproFile
+
+
 def openInputFile(Path):
     
     # Purpose: check existence and open input file

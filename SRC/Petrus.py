@@ -39,13 +39,13 @@ from InputOutput import openInputFile
 from InputOutput import readObsEpoch
 from InputOutput import readCorrectInputs
 from InputOutput import generatePreproFile
-# from InputOutput import generateCorrFile
+from InputOutput import generateCorrFile
 from InputOutput import PreproHdr, CorrHdr
 from InputOutput import CSNEPOCHS
 from InputOutput import ObsIdx
 from Preprocessing import runPreProcMeas
 # from PreprocessingPlots import generatePreproPlots
-# from CorrectionsPlots import generateCorrPlots
+from CorrectionsPlots import generateCorrPlots
 from Corrections import runCorrectMeas
 from COMMON.Dates import convertJulianDay2YearMonthDay
 from COMMON.Dates import convertYearMonthDay2Doy
@@ -227,9 +227,9 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
                         CorrInfo = runCorrectMeas(Conf, RcvrInfo[Rcvr], PreproObsInfo, SatInfo, LosInfo)
 
                         # If CORR outputs are requested
-                        # if Conf["CORR_OUT"] == 1:
+                        if Conf["CORR_OUT"] == 1:
                             # Generate output file
-                            # generateCorrFile(fcorr, CorrInfo)
+                            generateCorrFile(fcorr, CorrInfo)
 
                 # end if ObsInfo != []:
                 else:
@@ -251,7 +251,7 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
             PreproObsFile)
 
             # Generate Preprocessing plots
-            generatePreproPlots(PreproObsFile)
+            # generatePreproPlots(PreproObsFile)
 
         # If CORR outputs are requested
         if Conf["CORR_OUT"] == 1:
@@ -259,11 +259,11 @@ int(Conf["MIN_NCS_TH"][CSNEPOCHS]),  # Number of consecutive epochs for CS
             fcorr.close()
 
             # # Display Message
-            # print("INFO: Reading file: %s and generating CORR figures..." %
-            # CorrFile)
+            print("INFO: Reading file: %s and generating CORR figures..." %
+            CorrFile)
 
             # # Generate CORR plots
-            # generateCorrPlots(CorrFile, SatFile, RcvrInfo[Rcvr])
+            generateCorrPlots(CorrFile, SatFile, RcvrInfo[Rcvr])
 
         # Close input files
         fsat.close()
