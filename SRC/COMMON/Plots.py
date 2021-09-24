@@ -219,19 +219,21 @@ def generateLinesPlot(PlotConf):
         for Label in PlotConf["yData"].keys():
             if "ColorBar" in PlotConf:
                 ax.scatter(PlotConf["xData"][Label], PlotConf["yData"][Label], 
-                marker = PlotConf["Marker"],
+                marker = PlotConf["Marker"] if "Marker" in PlotConf else '.',
+                s = PlotConf["MarkerSize"][Label] if "Markersize" in PlotConf else 1,
                 linewidth = LineWidth,
                 c = cmap(normalize(np.array(PlotConf["zData"][Label]))))
 
             else:
                 ax.plot(PlotConf["xData"][Label], PlotConf["yData"][Label],
-                PlotConf["Marker"],
-                color = PlotConf["Color"][Label],
-                label = PlotConf["Label"][Label],
+                PlotConf["Marker"] if "Marker" in PlotConf else '.',
+                markersize = PlotConf["MarkerSize"][Label] if "Markersize" in PlotConf else 1,
+                color = PlotConf["Color"][Label] if "Color" in PlotConf else 'blue',
+                label = PlotConf["Label"][Label] if "Label" in PlotConf else 0,
                 linewidth = LineWidth)
 
         if "Legend" in PlotConf and PlotConf["Legend"] == True:
-                ax.legend(loc = 'upper right')
+                ax.legend(loc = 'lower left')
             
     saveFigure(fig, PlotConf["Path"])
 

@@ -188,7 +188,7 @@ REJECTION_CAUSE_DESC["10: Maximum Code Rate Step"]=10
 # CORR 
 # Header
 CorrHdr = "\
-#SOD DOY C PRN   ELEV    AZIM     IPPLON   IPPLAT   FLAG  SAT-X         SAT-Y           SAT-Z            SAT-CLK      UISD     STD      CORR-PSR       GEOM-RNGE     PSR-RES       RCVR-CLK     SFLT     SUIRE    STROPO   SAIR  SNOISEDIV  SMP    SUERE   ENTGPS \n"
+# SOD DOY C PRN   ELEV    AZIM     IPPLON   IPPLAT   FLAG  SAT-X         SAT-Y           SAT-Z            SAT-CLK      UISD     STD      CORR-PSR       GEOM-RNGE     PSR-RES       RCVR-CLK     SFLT     SUIRE    STROPO   SAIR  SNOISEDIV  SMP    SUERE   ENTGPS \n"
 
 # Line format
 CorrFmt = "%05d %03d %1s %02d %8.3f %8.3f %8.3f %8.3f %4d %14.3f \
@@ -1192,6 +1192,7 @@ def generateCorrFile(fcorr, CorrInfo):
         Outputs["SFLT"] = SatCorrInfo["SigmaFlt"]
         Outputs["SUIRE"] = SatCorrInfo["SigmaUire"]
         Outputs["STROPO"] = SatCorrInfo["SigmaTropo"]
+        Outputs["SAIR"] = SatCorrInfo["SigmaAirborne"]
         Outputs["SNOISEDIV"] = SatCorrInfo["SigmaNoiseDiv"]
         Outputs["SMP"] = SatCorrInfo["SigmaMultipath"]
         Outputs["SUERE"] = SatCorrInfo["SigmaUere"]
