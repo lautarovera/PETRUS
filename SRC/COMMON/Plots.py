@@ -212,17 +212,29 @@ def generateLinesPlot(PlotConf):
             if key == "LineWidth":
                 LineWidth = PlotConf["LineWidth"]
             if key == "ColorBar":
-                normalize, cmap = prepareColorBar(PlotConf, ax, PlotConf["zData"])
+                if int(PlotConf["ColorBarStep"]) == 1:
+                    cmap = mpl.cm.get_cmap(PlotConf["ColorBar"])
+                else:
+                    normalize, cmap = prepareColorBar(PlotConf, ax, PlotConf["zData"])
             if key == "Map" and PlotConf[key] == True:
                 drawMap(PlotConf, ax)
 
         for Label in PlotConf["yData"].keys():
             if "ColorBar" in PlotConf:
-                ax.scatter(PlotConf["xData"][Label], PlotConf["yData"][Label], 
+                if int(PlotConf["ColorBarStep"]) != 1:
+                    cmap(normalize(np.array(PlotConf["zData"][Label])))
+
+                im = ax.scatter(PlotConf["xData"][Label], PlotConf["yData"][Label], 
                 marker = PlotConf["Marker"] if "Marker" in PlotConf else '.',
-                s = PlotConf["MarkerSize"][Label] if "Markersize" in PlotConf else 1,
+                s = PlotConf["MarkerSize"][Label] if "MarkerSize" in PlotConf else 1,
                 linewidth = LineWidth,
-                c = cmap(normalize(np.array(PlotConf["zData"][Label]))))
+                c = PlotConf["zData"][Label],
+                cmap = cmap)
+
+                if int(PlotConf["ColorBarStep"]) == 1:
+                    plt.colorbar(im, ticks=range(int(PlotConf["ColorBarMin"]), int(PlotConf["ColorBarMax"]) + 1, int(PlotConf["ColorBarStep"])), \
+                                 boundaries=range(int(PlotConf["ColorBarMin"]), int(PlotConf["ColorBarMax"]) + 1, int(PlotConf["ColorBarStep"])), \
+                                 label=PlotConf["ColorBarLabel"])
 
             else:
                 ax.plot(PlotConf["xData"][Label], PlotConf["yData"][Label],
@@ -234,6 +246,7 @@ def generateLinesPlot(PlotConf):
 
         if "Legend" in PlotConf and PlotConf["Legend"] == True:
                 ax.legend(loc = 'lower left')
+            
             
     saveFigure(fig, PlotConf["Path"])
 

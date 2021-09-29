@@ -188,11 +188,11 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                     # Error bound estimation
                     SatCorrInfo["SigmaFlt"] = ((float(SatInfo[prn][SatIdx["SIGMAUDRE"]]) * float(SatInfo[prn][SatIdx["DELTAUDRE"]])) \
                                                     + float(SatInfo[prn][SatIdx["EPS-FC"]]) + float(SatInfo[prn][SatIdx["EPS-RRC"]]) \
-                                                    + float(SatInfo[prn][SatIdx["EPS-LTC"]]) + float(SatInfo[prn][SatIdx["EPS-ER"]])) ** 2 \
+                                                    + float(SatInfo[prn][SatIdx["EPS-LTC"]]) + float(SatInfo[prn][SatIdx["EPS-ER"]])) \
                                                     if float(SatInfo[prn][SatIdx["RSS"]]) == 0.00 \
-                                                    else (float(SatInfo[prn][SatIdx["SIGMAUDRE"]]) * float(SatInfo[prn][SatIdx["DELTAUDRE"]])) ** 2 \
+                                                    else sqrt((float(SatInfo[prn][SatIdx["SIGMAUDRE"]]) * float(SatInfo[prn][SatIdx["DELTAUDRE"]])) ** 2 \
                                                     + float(SatInfo[prn][SatIdx["EPS-FC"]]) ** 2 + float(SatInfo[prn][SatIdx["EPS-RRC"]]) ** 2 \
-                                                    + float(SatInfo[prn][SatIdx["EPS-LTC"]]) ** 2 + float(SatInfo[prn][SatIdx["EPS-ER"]]) ** 2
+                                                    + float(SatInfo[prn][SatIdx["EPS-LTC"]]) ** 2 + float(SatInfo[prn][SatIdx["EPS-ER"]]) ** 2)
                 
                     # -----------------------------------------------------------------------
                     # Computation of UISD and Sigma UIRE to comply: 
@@ -324,7 +324,7 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                     # -------------------
 
                     SigmaTVE = 0.12
-                    Mpp = 1.001 / sqrt(0.002001 + sin(SatCorrInfo["Elevation"]) ** 2)
+                    Mpp = 1.001 / sqrt(0.002001 + sin(np.deg2rad(SatCorrInfo["Elevation"])) ** 2)
                     # Compute Sigma Tropo
                     SatCorrInfo["SigmaTropo"] = SigmaTVE * Mpp
 
@@ -333,19 +333,16 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
                     # -------------------
 
                     # Compute Sigma Multi Path
-                    SatCorrInfo["SigmaMultipath"] = 0.13 + 0.53 * exp(-SatCorrInfo["Elevation"] / 10.0) if SatCorrInfo["Elevation"] > 2 else "ERROR"
+                    SatCorrInfo["SigmaMultipath"] = 0.13 + 0.53 * exp(-SatCorrInfo["Elevation"] / 10.0) if SatCorrInfo["Elevation"] > 2 else 0
                     # Compute Sigma Noise
-                    SatCorrInfo["SigmaNoiseDiv"] = 0.36 if SatCorrInfo["Elevation"] < Conf["ELEV_NOISE_TH"] else 0.15
+                    SatCorrInfo["SigmaNoiseDiv"] = 0.36 if SatCorrInfo["Elevation"] < float(Conf["ELEV_NOISE_TH"]) else 0.15
                     # Compute Sigma Airborne
                     SatCorrInfo["SigmaAirborne"] = sqrt(SatCorrInfo["SigmaMultipath"] ** 2 + SatCorrInfo["SigmaNoiseDiv"] ** 2)
 
                     # -------------------
                     # PETRUS-CORR-REQ-140
                     # -------------------
-                    SatCorrInfo["SigmaUere"] = sqrt(SatCorrInfo["SigmaFlt"] ** 2 \
-                                                + SatCorrInfo["SigmaUire"] ** 2 \
-                                                + SatCorrInfo["SigmaTropo"] ** 2 \
-                                                + SatCorrInfo["SigmaAirborne"] ** 2)
+                    SatCorrInfo["SigmaUere"] = sqrt(SatCorrInfo["SigmaFlt"] ** 2 + SatCorrInfo["SigmaUire"] ** 2 + SatCorrInfo["SigmaTropo"] ** 2 + SatCorrInfo["SigmaAirborne"] ** 2)
 
                     # Corrected Measurements from previous information
                     SatCorrInfo["CorrPsr"] = SatPrepro["SmoothC1"] + SatCorrInfo["SatClk"] - SatCorrInfo["Uisd"] - SatCorrInfo["Std"]
@@ -359,7 +356,7 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
 
                     # Compute residuals sum
                     Weight = 1 / (SatCorrInfo["SigmaUere"] ** 2)
-                    ResSum += Weight * SatCorrInfo["PsrResidual"]
+                    ResSum += (Weight * SatCorrInfo["PsrResidual"])
                     ResN += Weight
 
                     # Compute ENT-GPS offset
@@ -377,8 +374,7 @@ def runCorrectMeas(Conf, Rcvr, PreproObsInfo, SatInfo, LosInfo):
 
     # Loop over satellites
     for prn in CorrInfo:
-        # If SBAS information is available for current satellite
-        if (prn in SatInfo) and (prn in LosInfo):
+        if EntGpsN > 0:
             # Receiver clock first guess
             CorrInfo[prn]["RcvrClk"] = ResSum / ResN
             CorrInfo[prn]["PsrResidual"] -= CorrInfo[prn]["RcvrClk"]
